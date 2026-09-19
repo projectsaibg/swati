@@ -1,0 +1,43 @@
+# SWATI reverse proxy + TLS (automatic HTTPS via Let's Encrypt).
+# Replace swati.example.com with your real domain, then reload Caddy.
+# Only the public web app + /api are exposed. DB, Redis, and MinIO stay internal
+# (never proxied). Evidence photos are served by the API via presigned URLs, so
+# MinIO is not exposed here.
+
+swati.example.com {
+	encode gzip zstd
+
+	# API
+	handle /api/* {
+		reverse_proxy api:3000
+	}
+
+	# Static React SPA (public read-only view + the /admin routes, which the API
+	# gates by auth). SPA fallback to index.html.
+	handle {
+		root * /srv/web
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Baseline security headers (internet-facing public view).
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+# Local / no-domain fallback for first boot (http only). Comment out in prod.
+:80 {
+	handle /api/* {
+		reverse_proxy api:3000
+	}
+	handle {
+		root * /srv/web
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -1,0 +1,115 @@
+import axios, { AxiosError, AxiosRequestConfig } from 'axios';
+
+export type Visibility = 'PUBLIC' | 'LOGIN';
+export interface PublicFeature { key: string; visibility: Visibility }
+export interface AdminFeature { key: string; module: string; tier: string; enabled: boolean; visibility: Visibility }
+export interface Me { id: string; email: string; name: string; roleName?: string; rank?: number; permissions?: string[] }
+
+export interface Permission { key: string; label: string }
+export interface Role {
+  id: string; name: string; rank: number; permissions: string[];
+  reportsToId: string | null; reportsToName: string | null; userCount: number;
+}
+export interface AdminUser {
+  id: string; email: string; name: string; status: 'ACTIVE' | 'DISABLED';
+  roleId: string; roleName: string; roleRank: number;
+  managerId: string | null; managerName: string | null;
+  lastLogin: string | null; createdAt: string;
+}
+export type Transport = 'MQTT' | 'LORAWAN' | 'WIFI' | 'SIM' | 'RTU_MODBUS' | 'HTTP';
+export interface Device {
+  id: string; tag: string; name: string; type: string;
+  siteId: string | null; siteName: string | null;
+  latitude: number | null; longitude: number | null; status: string;
+  transport: Transport | null; gatewayId: string | null;
+  config: Record<string, unknown>; lastSeen: string | null;
+  lastMeasurement: { ts: string; metric: string; value: number; unit: string | null } | null;
+}
+export interface Measurement {
+  id: string; assetId: string; ts: string; metric: string;
+  value: number; unit: string | null; quality: string | null; source: string;
+}
+
+let accessToken: string | null = null;
+export const setAccessToken = (t: string | null) => { accessToken = t; };
+export const getAccessToken = () => accessToken;
+
+export const http = axios.create({ baseURL: '/api', withCredentials: true });
+
+http.interceptors.request.use((cfg) => {
+  if (accessToken) cfg.headers.Authorization = `Bearer ${accessToken}`;
+  return cfg;
+});
+
+let refreshing: Promise<string | null> | null = null;
+async function tryRefresh(): Promise<string | null> {
+  if (!refreshing) {
+    refreshing = axios
+      .post('/api/auth/refresh', {}, { withCredentials: true })
+      .then((r) => { setAccessToken(r.data.accessToken); return r.data.accessToken as string; })
+      .catch(() => { setAccessToken(null); return null; })
+      .finally(() => { refreshing = null; });
+  }
+  return refreshing;
+}
+
+http.interceptors.response.use(
+  (r) => r,
+  async (error: AxiosError) => {
+    const original = error.config as AxiosRequestConfig & { _retry?: boolean };
+    if (error.response?.status === 401 && original && !original._retry && !original.url?.includes('/auth/')) {
+      original._retry = true;
+      const t = await tryRefresh();
+      if (t) {
+        original.headers = { ...(original.headers || {}), Authorization: `Bearer ${t}` };
+        return http(original);
+      }
+    }
+    return Promise.reject(error);
+  },
+);
+
+// ---- typed calls ----
+export const api = {
+  login: (email: string, password: string) =>
+    http.post('/auth/login', { email, password }).then((r) => r.data as { accessToken: string; user: Me }),
+  logout: () => http.post('/auth/logout').then(() => undefined),
+  me: () => http.get('/auth/me').then((r) => r.data as Me),
+  publicFeatures: () => http.get('/public/features').then((r) => r.data as PublicFeature[]),
+  adminFeatures: () => http.get('/admin/features').then((r) => r.data as AdminFeature[]),
+  setFeature: (key: string, dto: { enabled?: boolean; visibility?: Visibility }) =>
+    http.patch(`/admin/features/${key}`, dto).then((r) => r.data as AdminFeature[]),
+  setTier: (tier: string) => http.put('/admin/tier', { tier }).then((r) => r.data as AdminFeature[]),
+
+  // Roles
+  permissions: () => http.get('/admin/roles/permissions').then((r) => r.data as Permission[]),
+  roles: () => http.get('/admin/roles').then((r) => r.data as Role[]),
+  createRole: (dto: { name: string; rank: number; permissions?: string[]; reportsToId?: string | null }) =>
+    http.post('/admin/roles', dto).then((r) => r.data as Role[]),
+  updateRole: (id: string, dto: Partial<{ name: string; rank: number; permissions: string[]; reportsToId: string | null }>) =>
+    http.patch(`/admin/roles/${id}`, dto).then((r) => r.data as Role[]),
+  deleteRole: (id: string) => http.delete(`/admin/roles/${id}`).then((r) => r.data as Role[]),
+
+  // Users
+  users: () => http.get('/admin/users').then((r) => r.data as AdminUser[]),
+  createUser: (dto: { email: string; name: string; roleId: string; managerId?: string | null; password?: string }) =>
+    http.post('/admin/users', dto).then((r) => r.data as { users: AdminUser[]; generatedPassword?: string }),
+  updateUser: (id: string, dto: Partial<{ name: string; roleId: string; managerId: string | null; status: 'ACTIVE' | 'DISABLED' }>) =>
+    http.patch(`/admin/users/${id}`, dto).then((r) => r.data as AdminUser[]),
+  resetUserPassword: (id: string) =>
+    http.post(`/admin/users/${id}/reset-password`).then((r) => r.data as { generatedPassword: string }),
+  deleteUser: (id: string) => http.delete(`/admin/users/${id}`).then((r) => r.data as AdminUser[]),
+
+  // Devices / IoT
+  devices: () => http.get('/devices').then((r) => r.data as Device[]),
+  registerDevice: (dto: {
+    tag: string; name: string; type: string; transport: Transport;
+    latitude?: number; longitude?: number; gatewayId?: string | null; config?: Record<string, unknown>;
+  }) => http.post('/devices', dto).then((r) => r.data as { id: string; devices: Device[] }),
+  updateDevice: (id: string, dto: Partial<{
+    name: string; transport: Transport; latitude: number; longitude: number;
+    gatewayId: string | null; config: Record<string, unknown>;
+  }>) => http.patch(`/devices/${id}`, dto).then((r) => r.data as Device[]),
+  deviceMeasurements: (id: string, metric?: string, limit = 100) =>
+    http.get(`/devices/${id}/measurements`, { params: { metric, limit } }).then((r) => r.data as Measurement[]),
+};

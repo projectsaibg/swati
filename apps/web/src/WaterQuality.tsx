@@ -120,34 +120,28 @@ export function WaterQuality() {
               />
             </div>
           </div>
-          <section className="kpi2">
-            {summary.parameters.map((p) => (
-              <div className={`wq-tile ${stClass(p.status)}`} key={p.key}>
-                <div className="wl">{p.label}</div>
-                <div className="wv tnum">{fmt(p.avg)}{p.unit && <span className="u">{p.unit}</span>}<Arrow p={p} /></div>
-                <div className="wmeta">{p.total ? `${p.breach} breach · ${p.warn} warn / ${p.total}` : 'no data'}</div>
+          <div className="wq-right">
+            <section className="kpi2">
+              {summary.parameters.map((p) => (
+                <div className={`wq-tile ${stClass(p.status)}`} key={p.key}>
+                  <div className="wl">{p.label}</div>
+                  <div className="wv tnum">{fmt(p.avg)}{p.unit && <span className="u">{p.unit}</span>}<Arrow p={p} /></div>
+                  <div className="wmeta">{p.total ? `${p.breach} breach · ${p.warn} warn / ${p.total}` : 'no data'}</div>
+                </div>
+              ))}
+            </section>
+            <div className="panel wq-meters">
+              <div className="meter">
+                <div className="mt"><span>Compliance progress</span><span className="mv" style={{ color: 'var(--ok)' }}>{summary.compliancePct}%</span></div>
+                <div className="track"><div className="fill" style={{ width: `${summary.compliancePct}%`, background: 'var(--ok)' }} /></div>
               </div>
-            ))}
-          </section>
+              <div className="meter">
+                <div className="mt"><span>Pollution / non-compliance</span><span className="mv" style={{ color: summary.pollutionPct >= 40 ? 'var(--alarm)' : 'var(--watch)' }}>{summary.pollutionPct}%</span></div>
+                <div className="track"><div className="fill" style={{ width: `${summary.pollutionPct}%`, background: summary.pollutionPct >= 40 ? 'var(--alarm)' : 'var(--watch)' }} /></div>
+              </div>
+            </div>
+          </div>
         </div>
-      )}
-
-      {/* Progress meters */}
-      {summary && (
-        <section className="wq-charts">
-          <div className="panel">
-            <div className="meter">
-              <div className="mt"><span>Compliance progress</span><span className="mv" style={{ color: 'var(--ok)' }}>{summary.compliancePct}%</span></div>
-              <div className="track"><div className="fill" style={{ width: `${summary.compliancePct}%`, background: 'var(--ok)' }} /></div>
-            </div>
-          </div>
-          <div className="panel">
-            <div className="meter">
-              <div className="mt"><span>Pollution / non-compliance</span><span className="mv" style={{ color: summary.pollutionPct >= 40 ? 'var(--alarm)' : 'var(--watch)' }}>{summary.pollutionPct}%</span></div>
-              <div className="track"><div className="fill" style={{ width: `${summary.pollutionPct}%`, background: summary.pollutionPct >= 40 ? 'var(--alarm)' : 'var(--watch)' }} /></div>
-            </div>
-          </div>
-        </section>
       )}
 
       {/* DMA cards */}

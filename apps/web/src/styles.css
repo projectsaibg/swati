@@ -252,7 +252,10 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 /* Two-column WQ top: charts left, KPI tiles (4x2) right */
 .wq-top { display: grid; grid-template-columns: 1.05fr 1.6fr; gap: 12px; margin-bottom: 12px; align-items: start; }
 .wq-top .wq-left { display: flex; flex-direction: column; gap: 12px; }
+.wq-top .wq-right { display: flex; flex-direction: column; gap: 12px; }
 .kpi2 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
+.wq-meters .meter { margin-bottom: 12px; }
+.wq-meters .meter:last-child { margin-bottom: 0; }
 @media (max-width: 1100px) { .wq-top { grid-template-columns: 1fr; } .kpi2 { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } }
 @media (max-width: 560px) { .kpi2 { grid-template-columns: repeat(2, 1fr); } }
 

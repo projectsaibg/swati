@@ -172,6 +172,13 @@ export const api = {
   // Pump Stations
   pumpStations: () => http.get('/pump-stations').then((r) => r.data as PumpStationSummary[]),
   pumpStation: (id: string) => http.get(`/pump-stations/${id}`).then((r) => r.data as PumpStationDetail),
+
+  // Field Verification
+  fieldVerifications: () => http.get('/field-verification').then((r) => r.data as FieldVerificationRow[]),
+  createFieldVerification: (form: FormData) =>
+    http.post('/field-verification', form).then((r) => r.data as { fieldVerification: FieldVerificationRow; attachmentId: string }),
+  fieldPhoto: (attId: string) =>
+    http.get(`/field-verification/${attId}/image`, { responseType: 'blob' }).then((r) => URL.createObjectURL(r.data as Blob)),
 };
 
 export interface GisImportRow { tag: string; name: string; type?: string; latitude: number; longitude: number }
@@ -198,6 +205,16 @@ export interface WqSummary {
 export interface WqDetail {
   id: string; tag: string; name: string; dmaName: string; transport: string | null; lastSeen: string | null;
   status: WqStatus; params: WqParam[]; trends: Record<string, { ts: string; value: number }[]>;
+}
+
+export interface FieldPhoto {
+  attachmentId: string; uploadedAt: string; exifTakenAt: string | null;
+  gpsLat: number | null; gpsLng: number | null; watermarked: boolean;
+}
+export interface FieldVerificationRow {
+  id: string; ref: string; location: string | null; category: string | null; verifier: string | null;
+  status: string; notes: string | null; latitude: number | null; longitude: number | null;
+  verifiedAt: string | null; createdAt: string; photos: FieldPhoto[];
 }
 
 export interface Series { ts: string; value: number }

@@ -310,7 +310,6 @@ model Message {
   assetTag    String?
   area        String?
   createdAt   DateTime      @default(now())
-  attachments Attachment[]
 
   @@index([toId, status])
 }
@@ -330,8 +329,8 @@ model Attachment {
   gpsLat      Decimal?        @db.Decimal(10, 7)
   gpsLng      Decimal?        @db.Decimal(10, 7)
   watermarked Boolean         @default(false)
-  message     Message?        @relation(fields: [ownerId], references: [id], map: "att_message_fk")
 
+  // ownerId is polymorphic (report / field-verification / message id) — no FK.
   @@index([ownerType, ownerId])
 }
 

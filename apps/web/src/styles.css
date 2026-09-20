@@ -250,12 +250,14 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 @media (max-width: 640px) { .esa-detail { grid-template-columns: 1fr; justify-items: center; } .subbar { grid-template-columns: 110px 1fr 40px; } }
 
 /* Two-column WQ top: charts left, KPI tiles (4x2) right */
-.wq-top { display: grid; grid-template-columns: 1.05fr 1.6fr; gap: 12px; margin-bottom: 12px; align-items: start; }
+.wq-top { display: grid; grid-template-columns: 1.05fr 1.6fr; gap: 12px; margin-bottom: 12px; align-items: stretch; }
 .wq-top .wq-left { display: flex; flex-direction: column; gap: 12px; }
 .wq-top .wq-right { display: flex; flex-direction: column; gap: 12px; }
+/* over-time panel and meters panel each fill their column so bottoms align */
+.wq-top .wq-left > .panel:last-child { flex: 1; display: flex; flex-direction: column; }
+.wq-top .wq-right > .wq-meters { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
 .kpi2 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
-.wq-meters .meter { margin-bottom: 12px; }
-.wq-meters .meter:last-child { margin-bottom: 0; }
+.wq-meters .meter { margin-bottom: 0; }
 @media (max-width: 1100px) { .wq-top { grid-template-columns: 1fr; } .kpi2 { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } }
 @media (max-width: 560px) { .kpi2 { grid-template-columns: repeat(2, 1fr); } }
 

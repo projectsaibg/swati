@@ -11,6 +11,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const { isEnabled, visibility } = useFeatures();
   const [open, setOpen] = useState(false);
+  const loc = useLocation();
 
   // A nav item shows if the feature is enabled AND (public OR the user is logged in).
   const visibleItems = NAV.filter(
@@ -53,7 +54,12 @@ export function Layout({ children }: { children: ReactNode }) {
 
       <div className="main">
         <div className="topbar">
-          <button className="btn ghost" onClick={() => setOpen((v) => !v)}>Menu</button>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <button className="btn ghost" onClick={() => setOpen((v) => !v)}>Menu</button>
+            {loc.pathname !== '/' && (
+              <NavLink className="btn ghost" to="/">&larr; Overview</NavLink>
+            )}
+          </div>
           <div className="right">
             {user ? (
               <>

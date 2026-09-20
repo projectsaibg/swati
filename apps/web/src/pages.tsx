@@ -91,7 +91,8 @@ export function Dashboard() {
 
   const featured = NAV.filter((i) => i.key !== 'executive_overview' && isEnabled(i.key));
   const TIER_BANDS: { name: string; match: string[] }[] = [
-    { name: 'Vector', match: ['BASE', 'VECTOR'] },
+    { name: 'Basic', match: ['BASE'] },
+    { name: 'Vector', match: ['VECTOR'] },
     { name: 'Velocity', match: ['VELOCITY'] },
     { name: 'Quantum', match: ['QUANTUM'] },
   ];
@@ -152,15 +153,15 @@ export function Dashboard() {
               {items.map((i) => {
                 const m = MODULE_META[i.key] ?? { icon: 'grid', desc: 'Module.', accent: 'cyan' as string };
                 return (
-                  <div className={`modcard ${m.accent}`} key={i.key}>
+                  <Link className={`modcard ${m.accent}`} key={i.key} to={i.path}>
                     <div className="modtop">
                       <div className="modicon"><Icon name={m.icon} size={22} /></div>
                       {m.badge && <span className="badge">{m.badge}</span>}
                     </div>
                     <h3>{i.label}</h3>
                     <p className="desc">{m.desc}</p>
-                    <Link className="modtrack" to={i.path}>Open</Link>
-                  </div>
+                    <span className="modtrack">Open</span>
+                  </Link>
                 );
               })}
             </section>

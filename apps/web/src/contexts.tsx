@@ -53,6 +53,7 @@ interface FeaturesCtx {
   features: PublicFeature[];
   isEnabled: (key: string) => boolean;
   visibility: (key: string) => 'PUBLIC' | 'LOGIN' | null;
+  tierOf: (key: string) => string | null;
   reload: () => Promise<void>;
   loading: boolean;
 }
@@ -73,6 +74,7 @@ export function FeaturesProvider({ children }: { children: ReactNode }) {
   useEffect(() => { reload(); }, []);
 
   const map = new Map(features.map((f) => [f.key, f.visibility]));
+  const tierMap = new Map(features.map((f) => [f.key, f.tier ?? null]));
   return (
     <FeaturesContext.Provider
       value={{
@@ -81,6 +83,7 @@ export function FeaturesProvider({ children }: { children: ReactNode }) {
         reload,
         isEnabled: (k) => map.has(k),
         visibility: (k) => map.get(k) ?? null,
+        tierOf: (k) => tierMap.get(k) ?? null,
       }}
     >
       {children}

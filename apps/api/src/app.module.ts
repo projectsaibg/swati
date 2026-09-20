@@ -7,6 +7,7 @@ import { AuthModule } from './auth';
 import { FeaturesModule } from './features';
 import { AdminModule } from './admin';
 import { DevicesModule } from './devices';
+import { DashboardModule } from './dashboard';
 import { FeatureGuard, HttpExceptionFilter, JwtAuthGuard, PermissionsGuard } from './common';
 import { Public } from './decorators';
 
@@ -28,6 +29,7 @@ export class HealthController {
     FeaturesModule,
     AdminModule,
     DevicesModule,
+    DashboardModule,
   ],
   controllers: [HealthController],
   providers: [

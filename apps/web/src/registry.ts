@@ -29,6 +29,30 @@ export const NAV: NavItem[] = [
   { key: 'reports', label: 'Reports', path: '/reports', group: 'Reports' },
 ];
 
+// Presentation metadata for the Executive Overview "featured modules" cards.
+// icon -> key in icons.tsx; accent -> modcard color class; badge optional.
+export interface ModuleMeta { icon: string; desc: string; accent: string; badge?: string }
+export const MODULE_META: Record<string, ModuleMeta> = {
+  interactive_map: { icon: 'map', desc: 'Live geospatial view of every asset and IoT device.', accent: 'cyan', badge: 'LIVE' },
+  action_center: { icon: 'alert', desc: 'Triage and acknowledge open operational alerts.', accent: 'red' },
+  condition_monitoring: { icon: 'activity', desc: 'Pump & motor ESA health and signal analysis.', accent: 'teal', badge: 'LIVE' },
+  network_analysis: { icon: 'network', desc: 'Distribution network topology and flow analysis.', accent: 'cyan' },
+  valve_control: { icon: 'sliders', desc: 'Remote valve operations and health monitoring.', accent: 'teal' },
+  maintenance: { icon: 'wrench', desc: 'Preventive and corrective maintenance planning.', accent: 'amber' },
+  leak_detection: { icon: 'shield', desc: 'Illegal connection and leakage detection.', accent: 'red', badge: 'NEW' },
+  water_quality: { icon: 'droplet', desc: 'Residual chlorine, turbidity and quality sampling.', accent: 'cyan' },
+  nrw_explorer: { icon: 'trending', desc: 'Non-revenue water tracking and loss analysis.', accent: 'amber' },
+  billing: { icon: 'currency', desc: 'Revenue assurance and collection analytics.', accent: 'green', badge: 'HOT' },
+  accountability: { icon: 'scale', desc: 'Scheme-wise accountability and performance.', accent: 'green' },
+  field_verification: { icon: 'clipboard', desc: 'Evidence-grade field verification with GPS photos.', accent: 'teal' },
+  predictive: { icon: 'chart', desc: 'Predictive analytics and failure forecasting.', accent: 'violet' },
+  digital_twin: { icon: 'cube', desc: '3D digital twin of the water network.', accent: 'violet', badge: 'NEW' },
+  chatbot: { icon: 'message', desc: 'AI assistant for operations and insights.', accent: 'violet' },
+  communication: { icon: 'send', desc: 'Chain-of-command messaging and escalation.', accent: 'cyan' },
+  key_personnel: { icon: 'users', desc: 'Directory of key personnel and responsibilities.', accent: 'teal' },
+  reports: { icon: 'file', desc: 'Operational and compliance reporting.', accent: 'cyan' },
+};
+
 export const GROUP_ORDER = [
   'Overview',
   'Assets',

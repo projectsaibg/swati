@@ -30,6 +30,25 @@ export interface Measurement {
   value: number; unit: string | null; quality: string | null; source: string;
 }
 
+export interface DashboardSummary {
+  assets: { total: number; running: number; fault: number; stopped: number };
+  devices: { total: number; online: number; offline: number };
+  alerts: { open: number; critical: number; alarm: number; watch: number; info: number };
+  health: { avg: number | null; min: number | null };
+  updatedAt: string;
+}
+export type Severity = 'INFO' | 'WATCH' | 'ALARM' | 'CRITICAL';
+export interface AlertRow {
+  id: string; category: string; severity: Severity; message: string;
+  metric: string | null; valueNum: number | null; status: string; createdAt: string;
+  assetTag: string | null; assetName: string | null;
+}
+export interface MapPoint {
+  id: string; tag: string; name: string; type: string;
+  latitude: number; longitude: number; status: string;
+  health: number | null; transport: string | null;
+}
+
 let accessToken: string | null = null;
 export const setAccessToken = (t: string | null) => { accessToken = t; };
 export const getAccessToken = () => accessToken;
@@ -112,4 +131,10 @@ export const api = {
   }>) => http.patch(`/devices/${id}`, dto).then((r) => r.data as Device[]),
   deviceMeasurements: (id: string, metric?: string, limit = 100) =>
     http.get(`/devices/${id}/measurements`, { params: { metric, limit } }).then((r) => r.data as Measurement[]),
+
+  // M3 base screens
+  dashboardSummary: () => http.get('/dashboard/summary').then((r) => r.data as DashboardSummary),
+  alerts: (status = 'OPEN') => http.get('/alerts', { params: { status } }).then((r) => r.data as AlertRow[]),
+  ackAlert: (id: string) => http.post(`/alerts/${id}/ack`).then((r) => r.data as AlertRow[]),
+  mapPoints: () => http.get('/map/points').then((r) => r.data as MapPoint[]),
 };

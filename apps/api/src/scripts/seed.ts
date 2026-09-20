@@ -298,7 +298,7 @@ async function main() {
     { tag: 'WQA-S1', name: 'DMA South analyser 1', dma: 'DMA South', lat: 15.191, lng: 74.106, transport: 'SIM', gw: 'SIM-WQ-09',
       base: { ph: 5.9, turbidity_ntu: 7.4, do_mgl: 2.6, temp_c: 33, conductivity_uscm: 2500, tds_mgl: 2300, hardness_mgl: 720, coliform_cfu: 14 } },
   ];
-  const WQ_STEPS = 8;
+  const WQ_STEPS = 90; // ~3h of history at 2-min spacing for a lively chart
   for (const w of wqaDefs) {
     const asset = await prisma.asset.upsert({
       where: { tag: w.tag },
@@ -310,17 +310,21 @@ async function main() {
       update: { transport: w.transport as any, gatewayId: w.gw, lastSeen: new Date() },
       create: { assetId: asset.id, transport: w.transport as any, config: { gateway: w.gw } as any, gatewayId: w.gw, lastSeen: new Date() },
     });
-    await prisma.measurement.deleteMany({ where: { assetId: asset.id, source: 'demo' } });
+    await prisma.measurement.deleteMany({ where: { assetId: asset.id, source: { in: ['demo', 'sim'] } } });
+    const wqRows: { assetId: string; ts: Date; metric: string; value: number; unit: string; quality: string; source: string }[] = [];
     for (let step = 0; step < WQ_STEPS; step++) {
-      const ts = new Date(now - (WQ_STEPS - 1 - step) * 30 * 60 * 1000);
+      const ts = new Date(now - (WQ_STEPS - 1 - step) * 2 * 60 * 1000); // 2-min spacing
       for (const [metric, base] of Object.entries(w.base)) {
         let value = base;
-        if (metric !== 'coliform_cfu') value = Math.round(base * (1 + Math.sin(step + base) * 0.02) * 100) / 100;
-        await prisma.measurement.create({
-          data: { assetId: asset.id, ts, metric, value, unit: WQ_UNITS[metric], quality: 'good', source: 'demo' },
-        });
+        if (metric === 'coliform_cfu') {
+          value = Math.max(0, Math.round(base + Math.sin(step / 5 + base) * 1.5));
+        } else {
+          value = Math.round(base * (1 + 0.09 * Math.sin(step / 7 + base) + 0.03 * Math.sin(step * 1.7 + base * 2)) * 100) / 100;
+        }
+        wqRows.push({ assetId: asset.id, ts, metric, value, unit: WQ_UNITS[metric], quality: 'good', source: 'demo' });
       }
     }
+    await prisma.measurement.createMany({ data: wqRows });
   }
 
   console.log('Seed complete.');

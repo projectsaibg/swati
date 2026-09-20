@@ -11,6 +11,7 @@ import { DashboardModule } from './dashboard';
 import { ConditionModule } from './condition';
 import { GisModule } from './gis';
 import { WaterQualityModule } from './wq';
+import { DemoSimulator } from './simulate';
 import { FeatureGuard, HttpExceptionFilter, JwtAuthGuard, PermissionsGuard } from './common';
 import { Public } from './decorators';
 
@@ -45,6 +46,7 @@ export class HealthController {
     { provide: APP_GUARD, useClass: PermissionsGuard },
     { provide: APP_GUARD, useClass: FeatureGuard },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
+    DemoSimulator,
   ],
 })
 export class AppModule {}

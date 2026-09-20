@@ -89,13 +89,19 @@ export function WaterQuality() {
   const [err, setErr] = useState('');
 
   useEffect(() => {
-    Promise.all([api.wqSummary(), api.wqAnalysers()])
+    const load = () => Promise.all([api.wqSummary(), api.wqAnalysers()])
       .then(([s, a]) => { setSummary(s); setAnalysers(a); })
       .catch(() => setErr('Could not load water quality data.'));
+    load();
+    const t = setInterval(load, 45000); // live refresh for the demo/real feed
+    return () => clearInterval(t);
   }, []);
   useEffect(() => {
     if (!sel) { setDetail(null); return; }
-    api.wqDetail(sel).then(setDetail).catch(() => setErr('Could not load analyser detail.'));
+    const load = () => api.wqDetail(sel).then(setDetail).catch(() => setErr('Could not load analyser detail.'));
+    load();
+    const t = setInterval(load, 45000);
+    return () => clearInterval(t);
   }, [sel]);
 
   const shown = dma ? analysers.filter((a) => a.dmaId === dma) : analysers;

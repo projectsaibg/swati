@@ -62,6 +62,33 @@ export function evaluate(key: string, value: number): WqStatus {
 }
 const worst = (a: WqStatus, b: WqStatus): WqStatus => (RANK[a] >= RANK[b] ? a : b);
 
+/** Continuous 0..100 quality score for a single reading (100 = ideal). Used
+ *  for the smooth "Water Quality Over Time" index so the chart moves with value
+ *  variance, not only when a status band flips. */
+export function scoreValue(key: string, value: number): number {
+  const m = BY_KEY.get(key);
+  if (!m) return 100;
+  const clamp = (x: number) => Math.max(0, Math.min(100, Math.round(x)));
+  if (m.kind === 'band') {
+    const [s0, s1] = m.bandSafe!; const [w0, w1] = m.bandWarn!;
+    if (value >= s0 && value <= s1) return 100;
+    if (value >= w0 && value <= w1) return 75;
+    const d = value < w0 ? w0 - value : value - w1;
+    return clamp(75 - (d / ((s1 - s0) || 1)) * 75);
+  }
+  if (m.kind === 'zero') return clamp(100 - value * 10);
+  if (m.kind === 'higherBetter') {
+    const safe = m.safeMin!; const warn = m.warnMin!; const bad = Math.max(0, warn - (safe - warn));
+    if (value >= safe) return 100;
+    if (value >= warn) return clamp(50 + ((value - warn) / ((safe - warn) || 1)) * 50);
+    return clamp(((value - bad) / ((warn - bad) || 1)) * 50);
+  }
+  const safe = m.safeMax!; const warn = m.warnMax!; const bad = warn + (warn - safe || warn);
+  if (value <= safe) return 100;
+  if (value <= warn) return clamp(50 + ((warn - value) / ((warn - safe) || 1)) * 50);
+  return clamp(((bad - value) / ((bad - warn) || 1)) * 50);
+}
+
 /**
  * Direction of a parameter's recent movement and whether it's an improvement.
  * `series` is newest-first. Compares the mean of the latest samples to the mean
@@ -202,18 +229,20 @@ export class WaterQualityService {
     const compliancePct = totalChecks ? Math.round((safeChecks / totalChecks) * 100) : 0;
     const pollutionPct = totalChecks ? Math.round(((warnChecks + breachChecks) / totalChecks) * 100) : 0;
 
-    // Over-time compliance: bucket recent rows by hour, % of readings within limits.
-    const buckets = new Map<number, { safe: number; total: number }>();
+    // Over-time water-quality index: bucket recent rows into 30-min windows and
+    // average the continuous 0..100 score, so the chart moves smoothly.
+    const BUCKET_MS = 30 * 60 * 1000;
+    const buckets = new Map<number, { sum: number; total: number }>();
     for (const r of rows) {
-      const b = Math.floor(new Date(r.ts).getTime() / (60 * 60 * 1000));
-      const cur = buckets.get(b) ?? { safe: 0, total: 0 };
+      const b = Math.floor(new Date(r.ts).getTime() / BUCKET_MS);
+      const cur = buckets.get(b) ?? { sum: 0, total: 0 };
       cur.total++;
-      if (evaluate(r.metric, Number(r.value)) === 'safe') cur.safe++;
+      cur.sum += scoreValue(r.metric, Number(r.value));
       buckets.set(b, cur);
     }
-    const overTime = [...buckets.keys()].sort((a, b) => a - b).slice(-8).map((k) => {
+    const overTime = [...buckets.keys()].sort((a, b) => a - b).slice(-10).map((k) => {
       const v = buckets.get(k)!;
-      return { label: new Date(k * 3600 * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), pct: Math.round((v.safe / v.total) * 100) };
+      return { label: new Date(k * BUCKET_MS).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), pct: Math.round(v.sum / v.total) };
     });
 
     return {

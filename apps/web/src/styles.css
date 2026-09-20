@@ -149,7 +149,11 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .alertmsg { font-weight: 600; }
 .alertmeta { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
-/* Lightweight geo scatter (real basemap/3D lands in a later milestone) */
+/* Leaflet basemap */
+.leafmap { height: 460px; border-radius: 14px; border: 1px solid var(--line); overflow: hidden; }
+.leafmap .leaflet-control-attribution { font-size: 10px; }
+
+/* Lightweight geo scatter (superseded by the Leaflet basemap; kept for reuse) */
 .mapwrap { position: relative; width: 100%; height: 460px; border-radius: 14px; border: 1px solid var(--line);
   background:
     linear-gradient(color-mix(in srgb, var(--line) 30%, transparent) 1px, transparent 1px) 0 0 / 100% 40px,

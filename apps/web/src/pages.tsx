@@ -77,7 +77,7 @@ function KpiCard({
 
 export function Dashboard() {
   const { user } = useAuth();
-  const { isEnabled } = useFeatures();
+  const { isEnabled, tierOf } = useFeatures();
   const [s, setS] = useState<DashboardSummary | null>(null);
   const [err, setErr] = useState('');
 
@@ -89,7 +89,12 @@ export function Dashboard() {
   const healthAccent = avg == null ? 'cyan' : avg >= 85 ? 'green' : avg >= 70 ? 'amber' : 'red';
   const alertAccent = !s ? 'amber' : s.alerts.critical + s.alerts.alarm > 0 ? 'red' : s.alerts.watch > 0 ? 'amber' : 'teal';
 
-  const featured = NAV.filter((i) => i.key !== 'executive_overview' && isEnabled(i.key)).slice(0, 10);
+  const featured = NAV.filter((i) => i.key !== 'executive_overview' && isEnabled(i.key));
+  const TIER_BANDS: { name: string; match: string[] }[] = [
+    { name: 'Vector', match: ['BASE', 'VECTOR'] },
+    { name: 'Velocity', match: ['VELOCITY'] },
+    { name: 'Quantum', match: ['QUANTUM'] },
+  ];
 
   return (
     <div>
@@ -137,27 +142,31 @@ export function Dashboard() {
         />
       </section>
 
-      {featured.length > 0 && (
-        <>
-          <div className="sectlabel">Featured modules</div>
-          <section className="modgrid">
-            {featured.map((i) => {
-              const m = MODULE_META[i.key] ?? { icon: 'grid', desc: 'Module.', accent: 'cyan' as string };
-              return (
-                <div className={`modcard ${m.accent}`} key={i.key}>
-                  <div className="modtop">
-                    <div className="modicon"><Icon name={m.icon} size={22} /></div>
-                    {m.badge && <span className="badge">{m.badge}</span>}
+      {TIER_BANDS.map((band) => {
+        const items = featured.filter((i) => band.match.includes(tierOf(i.key) ?? ''));
+        if (items.length === 0) return null;
+        return (
+          <div key={band.name}>
+            <div className="sectlabel">{band.name} tier</div>
+            <section className="modgrid">
+              {items.map((i) => {
+                const m = MODULE_META[i.key] ?? { icon: 'grid', desc: 'Module.', accent: 'cyan' as string };
+                return (
+                  <div className={`modcard ${m.accent}`} key={i.key}>
+                    <div className="modtop">
+                      <div className="modicon"><Icon name={m.icon} size={22} /></div>
+                      {m.badge && <span className="badge">{m.badge}</span>}
+                    </div>
+                    <h3>{i.label}</h3>
+                    <p className="desc">{m.desc}</p>
+                    <Link className="modtrack" to={i.path}>Open</Link>
                   </div>
-                  <h3>{i.label}</h3>
-                  <p className="desc">{m.desc}</p>
-                  <Link className="modtrack" to={i.path}>Open</Link>
-                </div>
-              );
-            })}
-          </section>
-        </>
-      )}
+                );
+              })}
+            </section>
+          </div>
+        );
+      })}
     </div>
   );
 }

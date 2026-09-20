@@ -1,7 +1,7 @@
 import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 
 export type Visibility = 'PUBLIC' | 'LOGIN';
-export interface PublicFeature { key: string; visibility: Visibility }
+export interface PublicFeature { key: string; visibility: Visibility; tier?: string | null }
 export interface AdminFeature { key: string; module: string; tier: string; enabled: boolean; visibility: Visibility }
 export interface Me { id: string; email: string; name: string; roleName?: string; rank?: number; permissions?: string[] }
 

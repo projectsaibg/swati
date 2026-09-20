@@ -93,12 +93,13 @@ export class FeaturesService {
     return this.cache?.get(key) ?? null;
   }
 
-  /** Public: only enabled features, key + visibility. */
-  async getPublicList(): Promise<Array<{ key: string; visibility: Visibility }>> {
+  /** Public: only enabled features, key + visibility + tier. */
+  async getPublicList(): Promise<Array<{ key: string; visibility: Visibility; tier: TierName | null }>> {
     await this.load();
-    const out: Array<{ key: string; visibility: Visibility }> = [];
+    const tierByKey = new Map(FEATURE_REGISTRY.map((f) => [f.key, f.tier]));
+    const out: Array<{ key: string; visibility: Visibility; tier: TierName | null }> = [];
     for (const [key, v] of this.cache ?? []) {
-      if (v.enabled) out.push({ key, visibility: v.visibility });
+      if (v.enabled) out.push({ key, visibility: v.visibility, tier: tierByKey.get(key) ?? null });
     }
     return out;
   }

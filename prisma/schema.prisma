@@ -51,6 +51,7 @@ enum AssetType {
   PRESSURE_SENSOR
   WATER_LEVEL
   CHLORINATOR
+  WQ_ANALYSER
 }
 
 enum Transport {
@@ -66,6 +67,12 @@ enum AssetStatus {
   RUNNING
   STOPPED
   FAULT
+}
+
+enum SiteKind {
+  DMA
+  PUMP_STATION
+  OTHER
 }
 
 enum Severity {
@@ -159,6 +166,7 @@ model User {
 model Site {
   id        String   @id @default(cuid())
   name      String
+  kind      SiteKind @default(OTHER)
   latitude  Decimal? @db.Decimal(10, 7)
   longitude Decimal? @db.Decimal(10, 7)
   createdAt DateTime @default(now())

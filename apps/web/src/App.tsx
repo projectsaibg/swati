@@ -5,6 +5,8 @@ import { Dashboard, Login, ModulePlaceholder } from './pages';
 import { ActionCenter } from './ActionCenter';
 import { MapPage } from './MapPage';
 import { ConditionMonitoring } from './ConditionMonitoring';
+import { WaterQuality } from './WaterQuality';
+import { PumpStations } from './PumpStations';
 import { Admin } from './Admin';
 import { NAV } from './registry';
 import { ReactNode } from 'react';
@@ -14,6 +16,8 @@ const PAGE_COMPONENTS: Record<string, ReactNode> = {
   interactive_map: <MapPage />,
   action_center: <ActionCenter />,
   condition_monitoring: <ConditionMonitoring />,
+  water_quality: <WaterQuality />,
+  pump_stations: <PumpStations />,
 };
 
 function AppRoutes() {

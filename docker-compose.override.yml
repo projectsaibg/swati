@@ -2,6 +2,8 @@
   api:
     environment:
       NODE_ENV: development
+      DEMO_SIMULATE: "1"          # local showcase: inject live WQ variance
+      DEMO_SIM_INTERVAL_SEC: "150"
     ports:
       - "3000:3000"
   db:

@@ -35,6 +35,8 @@ services:
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
       INGEST_API_KEY: ${INGEST_API_KEY:-}
+      DEMO_SIMULATE: ${DEMO_SIMULATE:-}
+      DEMO_SIM_INTERVAL_SEC: ${DEMO_SIM_INTERVAL_SEC:-}
     depends_on:
       db:
         condition: service_healthy

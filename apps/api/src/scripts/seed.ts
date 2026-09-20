@@ -272,6 +272,130 @@ async function main() {
     if (managerId) await prisma.user.update({ where: { id: userIds[u.email] }, data: { managerId } });
   }
 
+  // Water Quality Analysers across DMAs (Sites). Each WQA is an Asset of type
+  // WQ_ANALYSER linked to its DMA, with a Connectivity row and a time-series of
+  // the 8 parameters via generic Measurements — the same path real RTU-modem
+  // data uses, so scaling to many DMAs/analysers is adding rows, not code.
+  const dmaDefs = [
+    { name: 'DMA North', lat: 15.212, lng: 74.118 },
+    { name: 'DMA South', lat: 15.19, lng: 74.105 },
+  ];
+  const dmaIds: Record<string, string> = {};
+  for (const d of dmaDefs) {
+    let site = await prisma.site.findFirst({ where: { name: d.name } });
+    if (!site) site = await prisma.site.create({ data: { name: d.name, latitude: d.lat, longitude: d.lng } });
+    dmaIds[d.name] = site.id;
+  }
+  const WQ_UNITS: Record<string, string> = {
+    ph: '', turbidity_ntu: 'NTU', do_mgl: 'mg/L', temp_c: 'C',
+    conductivity_uscm: 'uS/cm', tds_mgl: 'mg/L', hardness_mgl: 'mg/L', coliform_cfu: 'CFU/100mL',
+  };
+  const wqaDefs = [
+    { tag: 'WQA-N1', name: 'DMA North analyser 1', dma: 'DMA North', lat: 15.213, lng: 74.119, transport: 'RTU_MODBUS', gw: 'RTU-WQ-01',
+      base: { ph: 7.4, turbidity_ntu: 0.6, do_mgl: 6.6, temp_c: 26, conductivity_uscm: 420, tds_mgl: 280, hardness_mgl: 140, coliform_cfu: 0 } },
+    { tag: 'WQA-N2', name: 'DMA North analyser 2', dma: 'DMA North', lat: 15.209, lng: 74.121, transport: 'MQTT', gw: 'MQTT-GW-05',
+      base: { ph: 7.2, turbidity_ntu: 2.6, do_mgl: 5.8, temp_c: 29, conductivity_uscm: 640, tds_mgl: 470, hardness_mgl: 360, coliform_cfu: 0 } },
+    { tag: 'WQA-S1', name: 'DMA South analyser 1', dma: 'DMA South', lat: 15.191, lng: 74.106, transport: 'SIM', gw: 'SIM-WQ-09',
+      base: { ph: 5.9, turbidity_ntu: 7.4, do_mgl: 2.6, temp_c: 33, conductivity_uscm: 2500, tds_mgl: 2300, hardness_mgl: 720, coliform_cfu: 14 } },
+  ];
+  const WQ_STEPS = 90; // ~3h of history at 2-min spacing for a lively chart
+  for (const w of wqaDefs) {
+    const asset = await prisma.asset.upsert({
+      where: { tag: w.tag },
+      update: { siteId: dmaIds[w.dma], type: 'WQ_ANALYSER', latitude: w.lat, longitude: w.lng },
+      create: { tag: w.tag, name: w.name, type: 'WQ_ANALYSER', siteId: dmaIds[w.dma], latitude: w.lat, longitude: w.lng },
+    });
+    await prisma.connectivity.upsert({
+      where: { assetId: asset.id },
+      update: { transport: w.transport as any, gatewayId: w.gw, lastSeen: new Date() },
+      create: { assetId: asset.id, transport: w.transport as any, config: { gateway: w.gw } as any, gatewayId: w.gw, lastSeen: new Date() },
+    });
+    await prisma.measurement.deleteMany({ where: { assetId: asset.id, source: { in: ['demo', 'sim'] } } });
+    const wqRows: { assetId: string; ts: Date; metric: string; value: number; unit: string; quality: string; source: string }[] = [];
+    for (let step = 0; step < WQ_STEPS; step++) {
+      const ts = new Date(now - (WQ_STEPS - 1 - step) * 2 * 60 * 1000); // 2-min spacing
+      for (const [metric, base] of Object.entries(w.base)) {
+        let value = base;
+        if (metric === 'coliform_cfu') {
+          value = Math.max(0, Math.round(base + Math.sin(step / 5 + base) * 1.5));
+        } else {
+          value = Math.round(base * (1 + 0.09 * Math.sin(step / 7 + base) + 0.03 * Math.sin(step * 1.7 + base * 2)) * 100) / 100;
+        }
+        wqRows.push({ assetId: asset.id, ts, metric, value, unit: WQ_UNITS[metric], quality: 'good', source: 'demo' });
+      }
+    }
+    await prisma.measurement.createMany({ data: wqRows });
+  }
+
+  // Pump stations (pump houses): each has 3-4 pumps on a duty rotation so every
+  // pump rests, plus station sensors (tank / pressure / flow) as devices.
+  const ROTATE_MS = 30 * 60 * 1000;
+  const dutyOn = (idx: number, total: number, t: number) => {
+    const running = Math.max(1, Math.ceil(total / 2));
+    return ((idx + Math.floor(t / ROTATE_MS)) % total) < running;
+  };
+  const PS_STEPS = 72; // 6h at 5-min spacing
+  const stationDefs = [
+    { name: 'Pumphouse Alpha', lat: 15.205, lng: 74.116, pumps: 4, kw: 75, flow: 45, faultIdx: -1 },
+    { name: 'Pumphouse Beta', lat: 15.198, lng: 74.128, pumps: 3, kw: 55, flow: 32, faultIdx: 2 },
+  ];
+  for (const st of stationDefs) {
+    let site = await prisma.site.findFirst({ where: { name: st.name, kind: 'PUMP_STATION' } });
+    if (!site) site = await prisma.site.create({ data: { name: st.name, kind: 'PUMP_STATION', latitude: st.lat, longitude: st.lng } });
+    const abbr = st.name.split(' ')[1].slice(0, 1).toUpperCase(); // A / B
+    const rows: any[] = [];
+
+    // Pumps
+    for (let i = 0; i < st.pumps; i++) {
+      const tag = `PS-${abbr}-P${i + 1}`;
+      const faulted = i === st.faultIdx;
+      const pump = await prisma.asset.upsert({
+        where: { tag },
+        update: { siteId: site.id, type: 'MOTOR_PUMP', status: faulted ? 'FAULT' : 'RUNNING', ratedPowerKw: st.kw },
+        create: { tag, name: `${st.name} pump ${i + 1}`, type: 'MOTOR_PUMP', siteId: site.id, status: faulted ? 'FAULT' : 'RUNNING', ratedPowerKw: st.kw, ratedVoltageV: 415, ratedCurrentA: st.kw * 1.8, ratedSpeedRpm: 1480 },
+      });
+      await prisma.reading.deleteMany({ where: { assetId: pump.id, source: 'ps-demo' } });
+      await prisma.reading.create({ data: { assetId: pump.id, ts: new Date(now), healthScore: faulted ? 46 : 88 + i * 2, source: 'ps-demo' } });
+      await prisma.measurement.deleteMany({ where: { assetId: pump.id, source: { in: ['demo', 'sim'] } } });
+      for (let step = 0; step < PS_STEPS; step++) {
+        const t = now - (PS_STEPS - 1 - step) * 5 * 60 * 1000;
+        const on = !faulted && dutyOn(i, st.pumps, t);
+        const power = on ? Math.round((st.kw * (0.82 + 0.06 * Math.sin(step / 6 + i)) + (Math.random() - 0.5) * 3) * 10) / 10 : 0;
+        const flow = on ? Math.round((st.flow * (0.9 + 0.08 * Math.sin(step / 5 + i)) + (Math.random() - 0.5) * 2) * 10) / 10 : 0;
+        rows.push({ assetId: pump.id, ts: new Date(t), metric: 'run_state', value: on ? 1 : 0, unit: '', quality: 'good', source: 'demo' });
+        rows.push({ assetId: pump.id, ts: new Date(t), metric: 'power_kw', value: power, unit: 'kW', quality: 'good', source: 'demo' });
+        rows.push({ assetId: pump.id, ts: new Date(t), metric: 'flow_klh', value: flow, unit: 'kL/h', quality: 'good', source: 'demo' });
+      }
+    }
+
+    // Station sensors: tank (level), pressure, flow.
+    const devs: { tag: string; type: string; metric: string; unit: string; base: number; also?: { metric: string; unit: string; factor: number } }[] = [
+      { tag: `PS-${abbr}-TANK`, type: 'WATER_LEVEL', metric: 'level_pct', unit: '%', base: 82, also: { metric: 'storage_m3', unit: 'm3', factor: 1.2 } },
+      { tag: `PS-${abbr}-PRES`, type: 'PRESSURE_SENSOR', metric: 'pressure_bar', unit: 'bar', base: 5.6 },
+      { tag: `PS-${abbr}-FLOW`, type: 'FLOW_METER', metric: 'net_flow_klh', unit: 'kL/h', base: st.flow * 1.6 },
+    ];
+    for (const d of devs) {
+      const asset = await prisma.asset.upsert({
+        where: { tag: d.tag },
+        update: { siteId: site.id, type: d.type as any },
+        create: { tag: d.tag, name: `${st.name} ${d.type}`, type: d.type as any, siteId: site.id },
+      });
+      await prisma.connectivity.upsert({
+        where: { assetId: asset.id },
+        update: { transport: 'RTU_MODBUS', lastSeen: new Date() },
+        create: { assetId: asset.id, transport: 'RTU_MODBUS', config: {} as any, gatewayId: `RTU-${abbr}`, lastSeen: new Date() },
+      });
+      await prisma.measurement.deleteMany({ where: { assetId: asset.id, source: { in: ['demo', 'sim'] } } });
+      for (let step = 0; step < PS_STEPS; step++) {
+        const t = now - (PS_STEPS - 1 - step) * 5 * 60 * 1000;
+        const v = Math.round((d.base * (1 + 0.08 * Math.sin(step / 7)) + (Math.random() - 0.5) * (d.base * 0.03)) * 100) / 100;
+        rows.push({ assetId: asset.id, ts: new Date(t), metric: d.metric, value: v, unit: d.unit, quality: 'good', source: 'demo' });
+        if (d.also) rows.push({ assetId: asset.id, ts: new Date(t), metric: d.also.metric, value: Math.round(v * d.also.factor * 10) / 10, unit: d.also.unit, quality: 'good', source: 'demo' });
+      }
+    }
+    await prisma.measurement.createMany({ data: rows });
+  }
+
   console.log('Seed complete.');
   console.log(`Admin login: ${adminEmail}`);
   console.log(`Admin password (shown once): ${adminPassword}`);

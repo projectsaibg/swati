@@ -163,6 +163,58 @@ export const api = {
   // GIS import
   gisImport: (assets: GisImportRow[]) =>
     http.post('/gis/import', { assets }).then((r) => r.data as { created: number; updated: number; total: number }),
+
+  // Water Quality
+  wqSummary: () => http.get('/water-quality/summary').then((r) => r.data as WqSummary),
+  wqAnalysers: () => http.get('/water-quality/analysers').then((r) => r.data as WqAnalyser[]),
+  wqDetail: (id: string) => http.get(`/water-quality/analysers/${id}`).then((r) => r.data as WqDetail),
+
+  // Pump Stations
+  pumpStations: () => http.get('/pump-stations').then((r) => r.data as PumpStationSummary[]),
+  pumpStation: (id: string) => http.get(`/pump-stations/${id}`).then((r) => r.data as PumpStationDetail),
 };
 
 export interface GisImportRow { tag: string; name: string; type?: string; latitude: number; longitude: number }
+
+export type WqStatus = 'safe' | 'warn' | 'breach';
+export interface WqParam { key: string; label: string; unit: string; value: number | null; status: WqStatus | null; ts: string | null }
+export interface WqAnalyser {
+  id: string; tag: string; name: string; dmaId: string | null; dmaName: string;
+  transport: string | null; lastSeen: string | null; status: WqStatus; params: WqParam[];
+}
+export interface WqParamSummary {
+  key: string; label: string; unit: string; avg: number | null; status: WqStatus | null;
+  breach: number; warn: number; total: number; trend: 'up' | 'down' | 'flat'; good: boolean;
+}
+export interface WqSummary {
+  analyserCount: number; dmaCount: number;
+  parameters: WqParamSummary[];
+  dmas: { id: string; name: string; analyserCount: number; status: WqStatus; worstParam: string | null }[];
+  compliance: { compliant: number; nonCompliant: number; underReview: number; pending: number };
+  compliancePct: number;
+  pollutionPct: number;
+  overTime: { label: string; pct: number }[];
+}
+export interface WqDetail {
+  id: string; tag: string; name: string; dmaName: string; transport: string | null; lastSeen: string | null;
+  status: WqStatus; params: WqParam[]; trends: Record<string, { ts: string; value: number }[]>;
+}
+
+export interface Series { ts: string; value: number }
+export interface PumpStationSummary {
+  id: string; name: string; pumpCount: number; running: number; tripped: number;
+  storageM3: number | null; levelPct: number | null; pressureBar: number | null; netFlowKlh: number | null;
+}
+export type PumpState = 'RUN' | 'REST' | 'TRIP';
+export interface StationPump {
+  id: string; tag: string; name: string; state: PumpState; health: number | null;
+  dutyPct: number; runtimeH: number; powerKw: number | null; flowKlh: number | null;
+  timeline: { ts: string; on: boolean }[]; powerTrend: Series[];
+}
+export interface PumpStationDetail {
+  id: string; name: string;
+  kpis: { storageM3: number | null; levelPct: number | null; pressureBar: number | null; netFlowKlh: number | null;
+    running: number; resting: number; tripped: number; totalPowerKw: number };
+  pumps: StationPump[];
+  charts: { flow: Series[]; energy: Series[]; tank: Series[] };
+}

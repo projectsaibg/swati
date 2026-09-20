@@ -13,6 +13,11 @@ jobs:
   api:
     name: API (schema + build)
     runs-on: ubuntu-latest
+    env:
+      # prisma validate/generate resolve the datasource's env("DATABASE_URL")
+      # even though neither connects to a database. A dummy value satisfies the
+      # resolver offline; no Postgres is started in CI.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci?schema=public
     defaults:
       run:
         working-directory: apps/api

@@ -49,6 +49,24 @@ export interface MapPoint {
   health: number | null; transport: string | null;
 }
 
+export interface EsaResult {
+  supplyIndex: number | null; statorIndex: number | null; rotorIndex: number | null;
+  eccentricityIndex: number | null; bearingIndex: number | null; loadIndex: number | null;
+  healthScore: number | null; severity: Severity; drivers: string[];
+}
+export interface ConditionAsset {
+  id: string; tag: string; name: string; type: string; status: string;
+  ratedPowerKw: number | null; lastReadingTs: string | null; esa: EsaResult | null;
+}
+export interface ConditionDetail {
+  id: string; tag: string; name: string; type: string; status: string;
+  rated: { powerKw: number | null; voltageV: number | null; currentA: number | null; speedRpm: number | null };
+  latest: Record<string, number | string | null> | null;
+  esa: EsaResult | null;
+  trend: { ts: string; healthScore: number | null }[];
+  recent: { ts: string; healthScore: number | null; loadPct: number | null; vibrationMmS: number | null; bearingTempC: number | null; source: string }[];
+}
+
 let accessToken: string | null = null;
 export const setAccessToken = (t: string | null) => { accessToken = t; };
 export const getAccessToken = () => accessToken;
@@ -137,4 +155,8 @@ export const api = {
   alerts: (status = 'OPEN') => http.get('/alerts', { params: { status } }).then((r) => r.data as AlertRow[]),
   ackAlert: (id: string) => http.post(`/alerts/${id}/ack`).then((r) => r.data as AlertRow[]),
   mapPoints: () => http.get('/map/points').then((r) => r.data as MapPoint[]),
+
+  // Pump & Motor ESA
+  conditionAssets: () => http.get('/condition/assets').then((r) => r.data as ConditionAsset[]),
+  conditionDetail: (id: string) => http.get(`/condition/assets/${id}`).then((r) => r.data as ConditionDetail),
 };

@@ -161,6 +161,41 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .mappt.RUNNING { background: var(--ok); color: var(--ok); } .mappt.FAULT { background: var(--alarm); color: var(--alarm); } .mappt.STOPPED { background: var(--watch); color: var(--watch); }
 .maptip { position: absolute; transform: translate(-50%, -140%); background: var(--surface2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px; white-space: nowrap; pointer-events: none; z-index: 5; }
 
+/* Pump & Motor ESA */
+.esa-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-bottom: 22px; }
+.esa-card { position: relative; border-radius: 14px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--c, var(--accent)); cursor: pointer; transition: transform .12s ease, border-color .12s; }
+.esa-card:hover { transform: translateY(-2px); }
+.esa-card.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.esa-card .tag { font-size: 12px; color: var(--muted); }
+.esa-card .nm { font-weight: 700; margin: 2px 0 10px; }
+.esa-card .hs { display: flex; align-items: baseline; gap: 8px; }
+.esa-card .hs .n { font-size: 30px; font-weight: 900; }
+
+.gauge { --v: 0; --c: var(--ok); width: 150px; height: 150px; border-radius: 50%;
+  background: conic-gradient(var(--c) calc(var(--v) * 1%), color-mix(in srgb, var(--line) 70%, transparent) 0);
+  display: grid; place-items: center; position: relative; }
+.gauge::before { content: ""; position: absolute; inset: 12px; border-radius: 50%; background: var(--surface); }
+.gauge .g-in { position: relative; text-align: center; }
+.gauge .g-in .n { font-size: 34px; font-weight: 900; line-height: 1; }
+.gauge .g-in .l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+
+.esa-detail { display: grid; grid-template-columns: 180px 1fr; gap: 22px; align-items: center; }
+.subbars { display: flex; flex-direction: column; gap: 10px; }
+.subbar { display: grid; grid-template-columns: 150px 1fr 42px; gap: 12px; align-items: center; font-size: 13px; }
+.subbar .lbl { color: var(--muted); }
+.subbar .track { height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--line) 75%, transparent); overflow: hidden; }
+.subbar .fill { height: 100%; border-radius: 999px; }
+.subbar .fill.good { background: var(--ok); } .subbar .fill.warn { background: var(--watch); } .subbar .fill.bad { background: var(--alarm); }
+.subbar .v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+
+.drivers { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.driverchip { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, var(--alarm) 18%, transparent); border: 1px solid color-mix(in srgb, var(--alarm) 45%, transparent); color: #ffd7cf; }
+.paramgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.param { background: var(--surface2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; }
+.param .pv { font-weight: 800; font-size: 16px; } .param .pl { color: var(--muted); font-size: 11px; }
+
+@media (max-width: 640px) { .esa-detail { grid-template-columns: 1fr; justify-items: center; } .subbar { grid-template-columns: 110px 1fr 40px; } }
+
 @media (max-width: 780px) {
   .shell { grid-template-columns: 1fr; }
   .sidebar { position: fixed; z-index: 20; width: 248px; height: 100%; transform: translateX(-100%); transition: transform .2s; }

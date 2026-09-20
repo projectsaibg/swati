@@ -51,6 +51,7 @@ enum AssetType {
   PRESSURE_SENSOR
   WATER_LEVEL
   CHLORINATOR
+  WQ_ANALYSER
 }
 
 enum Transport {

@@ -149,6 +149,23 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .alertmsg { font-weight: 600; }
 .alertmeta { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
+/* Water Quality */
+.wq-params { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 22px; }
+.wq-tile { --c: var(--ok); background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--c); border-radius: 12px; padding: 12px 14px; }
+.wq-tile.st-safe { --c: var(--ok); } .wq-tile.st-warn { --c: var(--watch); } .wq-tile.st-breach { --c: var(--alarm); } .wq-tile.st-none { --c: var(--muted); }
+.wq-tile .wl { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.wq-tile .wv { font-size: 24px; font-weight: 900; margin-top: 4px; }
+.wq-tile .wv .u { font-size: 13px; font-weight: 700; color: var(--muted); margin-left: 3px; }
+.wq-tile .wmeta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.dma-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.dma-card { background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--c, var(--ok)); border-radius: 12px; padding: 14px 16px; cursor: pointer; transition: transform .12s; }
+.dma-card.st-safe { --c: var(--ok); } .dma-card.st-warn { --c: var(--watch); } .dma-card.st-breach { --c: var(--alarm); }
+.dma-card.sel { box-shadow: 0 0 0 1px var(--accent); }
+.dma-card:hover { transform: translateY(-2px); }
+.dma-card .dn { font-weight: 800; font-size: 16px; }
+.st-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+.st-dot.st-safe { background: var(--ok); } .st-dot.st-warn { background: var(--watch); } .st-dot.st-breach { background: var(--alarm); } .st-dot.st-none { background: var(--muted); }
+
 /* Leaflet basemap */
 .leafmap { height: 460px; border-radius: 14px; border: 1px solid var(--line); overflow: hidden; }
 .leafmap .leaflet-control-attribution { font-size: 10px; }

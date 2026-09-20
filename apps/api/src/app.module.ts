@@ -10,6 +10,7 @@ import { DevicesModule } from './devices';
 import { DashboardModule } from './dashboard';
 import { ConditionModule } from './condition';
 import { GisModule } from './gis';
+import { WaterQualityModule } from './wq';
 import { FeatureGuard, HttpExceptionFilter, JwtAuthGuard, PermissionsGuard } from './common';
 import { Public } from './decorators';
 
@@ -34,6 +35,7 @@ export class HealthController {
     DashboardModule,
     ConditionModule,
     GisModule,
+    WaterQualityModule,
   ],
   controllers: [HealthController],
   providers: [

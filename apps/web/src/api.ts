@@ -163,6 +163,27 @@ export const api = {
   // GIS import
   gisImport: (assets: GisImportRow[]) =>
     http.post('/gis/import', { assets }).then((r) => r.data as { created: number; updated: number; total: number }),
+
+  // Water Quality
+  wqSummary: () => http.get('/water-quality/summary').then((r) => r.data as WqSummary),
+  wqAnalysers: () => http.get('/water-quality/analysers').then((r) => r.data as WqAnalyser[]),
+  wqDetail: (id: string) => http.get(`/water-quality/analysers/${id}`).then((r) => r.data as WqDetail),
 };
 
 export interface GisImportRow { tag: string; name: string; type?: string; latitude: number; longitude: number }
+
+export type WqStatus = 'safe' | 'warn' | 'breach';
+export interface WqParam { key: string; label: string; unit: string; value: number | null; status: WqStatus | null; ts: string | null }
+export interface WqAnalyser {
+  id: string; tag: string; name: string; dmaId: string | null; dmaName: string;
+  transport: string | null; lastSeen: string | null; status: WqStatus; params: WqParam[];
+}
+export interface WqSummary {
+  analyserCount: number; dmaCount: number;
+  parameters: { key: string; label: string; unit: string; avg: number | null; status: WqStatus | null; breach: number; warn: number; total: number }[];
+  dmas: { id: string; name: string; analyserCount: number; status: WqStatus; worstParam: string | null }[];
+}
+export interface WqDetail {
+  id: string; tag: string; name: string; dmaName: string; transport: string | null; lastSeen: string | null;
+  status: WqStatus; params: WqParam[]; trends: Record<string, { ts: string; value: number }[]>;
+}

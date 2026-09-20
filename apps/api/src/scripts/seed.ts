@@ -272,6 +272,57 @@ async function main() {
     if (managerId) await prisma.user.update({ where: { id: userIds[u.email] }, data: { managerId } });
   }
 
+  // Water Quality Analysers across DMAs (Sites). Each WQA is an Asset of type
+  // WQ_ANALYSER linked to its DMA, with a Connectivity row and a time-series of
+  // the 8 parameters via generic Measurements — the same path real RTU-modem
+  // data uses, so scaling to many DMAs/analysers is adding rows, not code.
+  const dmaDefs = [
+    { name: 'DMA North', lat: 15.212, lng: 74.118 },
+    { name: 'DMA South', lat: 15.19, lng: 74.105 },
+  ];
+  const dmaIds: Record<string, string> = {};
+  for (const d of dmaDefs) {
+    let site = await prisma.site.findFirst({ where: { name: d.name } });
+    if (!site) site = await prisma.site.create({ data: { name: d.name, latitude: d.lat, longitude: d.lng } });
+    dmaIds[d.name] = site.id;
+  }
+  const WQ_UNITS: Record<string, string> = {
+    ph: '', turbidity_ntu: 'NTU', do_mgl: 'mg/L', temp_c: 'C',
+    conductivity_uscm: 'uS/cm', tds_mgl: 'mg/L', hardness_mgl: 'mg/L', coliform_cfu: 'CFU/100mL',
+  };
+  const wqaDefs = [
+    { tag: 'WQA-N1', name: 'DMA North analyser 1', dma: 'DMA North', lat: 15.213, lng: 74.119, transport: 'RTU_MODBUS', gw: 'RTU-WQ-01',
+      base: { ph: 7.4, turbidity_ntu: 0.6, do_mgl: 6.6, temp_c: 26, conductivity_uscm: 420, tds_mgl: 280, hardness_mgl: 140, coliform_cfu: 0 } },
+    { tag: 'WQA-N2', name: 'DMA North analyser 2', dma: 'DMA North', lat: 15.209, lng: 74.121, transport: 'MQTT', gw: 'MQTT-GW-05',
+      base: { ph: 7.2, turbidity_ntu: 2.6, do_mgl: 5.8, temp_c: 29, conductivity_uscm: 640, tds_mgl: 470, hardness_mgl: 360, coliform_cfu: 0 } },
+    { tag: 'WQA-S1', name: 'DMA South analyser 1', dma: 'DMA South', lat: 15.191, lng: 74.106, transport: 'SIM', gw: 'SIM-WQ-09',
+      base: { ph: 5.9, turbidity_ntu: 7.4, do_mgl: 2.6, temp_c: 33, conductivity_uscm: 2500, tds_mgl: 2300, hardness_mgl: 720, coliform_cfu: 14 } },
+  ];
+  const WQ_STEPS = 8;
+  for (const w of wqaDefs) {
+    const asset = await prisma.asset.upsert({
+      where: { tag: w.tag },
+      update: { siteId: dmaIds[w.dma], type: 'WQ_ANALYSER', latitude: w.lat, longitude: w.lng },
+      create: { tag: w.tag, name: w.name, type: 'WQ_ANALYSER', siteId: dmaIds[w.dma], latitude: w.lat, longitude: w.lng },
+    });
+    await prisma.connectivity.upsert({
+      where: { assetId: asset.id },
+      update: { transport: w.transport as any, gatewayId: w.gw, lastSeen: new Date() },
+      create: { assetId: asset.id, transport: w.transport as any, config: { gateway: w.gw } as any, gatewayId: w.gw, lastSeen: new Date() },
+    });
+    await prisma.measurement.deleteMany({ where: { assetId: asset.id, source: 'demo' } });
+    for (let step = 0; step < WQ_STEPS; step++) {
+      const ts = new Date(now - (WQ_STEPS - 1 - step) * 30 * 60 * 1000);
+      for (const [metric, base] of Object.entries(w.base)) {
+        let value = base;
+        if (metric !== 'coliform_cfu') value = Math.round(base * (1 + Math.sin(step + base) * 0.02) * 100) / 100;
+        await prisma.measurement.create({
+          data: { assetId: asset.id, ts, metric, value, unit: WQ_UNITS[metric], quality: 'good', source: 'demo' },
+        });
+      }
+    }
+  }
+
   console.log('Seed complete.');
   console.log(`Admin login: ${adminEmail}`);
   console.log(`Admin password (shown once): ${adminPassword}`);

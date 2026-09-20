@@ -159,4 +159,10 @@ export const api = {
   // Pump & Motor ESA
   conditionAssets: () => http.get('/condition/assets').then((r) => r.data as ConditionAsset[]),
   conditionDetail: (id: string) => http.get(`/condition/assets/${id}`).then((r) => r.data as ConditionDetail),
+
+  // GIS import
+  gisImport: (assets: GisImportRow[]) =>
+    http.post('/gis/import', { assets }).then((r) => r.data as { created: number; updated: number; total: number }),
 };
+
+export interface GisImportRow { tag: string; name: string; type?: string; latitude: number; longitude: number }

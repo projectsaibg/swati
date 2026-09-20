@@ -96,11 +96,11 @@ export function PumpStations() {
           </div>
 
           {/* Charts */}
-          <section className="wq-charts">
-            <div className="panel"><p className="chart-title">Net Flow</p><AxisChart data={toPoints(d.charts.flow)} color="var(--accent)" name="Net flow" unit="kL/h" type="area" /></div>
-            <div className="panel"><p className="chart-title">System Energy</p><AxisChart data={toPoints(d.charts.energy)} color="var(--watch)" name="Total power" unit="kW" type="area" /></div>
+          <section className="charts-3">
+            <div className="panel"><p className="chart-title">Net Flow</p><AxisChart data={toPoints(d.charts.flow)} color="var(--accent)" name="Net flow" unit="kL/h" type="area" height={130} /></div>
+            <div className="panel"><p className="chart-title">System Energy</p><AxisChart data={toPoints(d.charts.energy)} color="var(--watch)" name="Total power" unit="kW" type="area" height={130} /></div>
+            <div className="panel"><p className="chart-title">Tank Level</p><AxisChart data={toPoints(d.charts.tank)} color="var(--accent2)" name="Tank level" unit="%" type="area" yMin={0} yMax={100} height={130} /></div>
           </section>
-          <div className="panel"><p className="chart-title">Tank Level</p><AxisChart data={toPoints(d.charts.tank)} color="var(--accent2)" name="Tank level" unit="%" type="area" yMin={0} yMax={100} /></div>
 
           {/* Per-pump drilldown */}
           <div className="sectlabel">Individual pump</div>

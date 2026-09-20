@@ -249,6 +249,29 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 
 @media (max-width: 640px) { .esa-detail { grid-template-columns: 1fr; justify-items: center; } .subbar { grid-template-columns: 110px 1fr 40px; } }
 
+/* Two-column WQ top: charts left, KPI tiles (4x2) right */
+.wq-top { display: grid; grid-template-columns: 1.05fr 1.6fr; gap: 12px; margin-bottom: 12px; align-items: stretch; }
+.wq-top .wq-left { display: flex; flex-direction: column; gap: 12px; }
+.wq-top .wq-right { display: flex; flex-direction: column; gap: 12px; }
+/* over-time panel and meters panel each fill their column so bottoms align */
+.wq-top .wq-left > .panel:last-child { flex: 1; display: flex; flex-direction: column; }
+.wq-top .wq-right > .wq-meters { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+.kpi2 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
+.wq-meters .meter { margin-bottom: 0; }
+@media (max-width: 1100px) { .wq-top { grid-template-columns: 1fr; } .kpi2 { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } }
+@media (max-width: 560px) { .kpi2 { grid-template-columns: repeat(2, 1fr); } }
+
+/* Three charts in one row */
+.charts-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 12px; }
+@media (max-width: 900px) { .charts-3 { grid-template-columns: 1fr; } }
+
+/* Featured modules: uniform 5 x 2 grid */
+.modgrid { grid-template-columns: repeat(5, 1fr); }
+@media (max-width: 1200px) { .modgrid { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 900px) { .modgrid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 620px) { .modgrid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 420px) { .modgrid { grid-template-columns: 1fr; } }
+
 /* Chart legend / empty state */
 .chart-legend { display: flex; gap: 6px; align-items: center; justify-content: center; font-size: 11px; color: var(--muted); margin-top: 4px; }
 .chart-legend .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }

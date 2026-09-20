@@ -12,24 +12,24 @@ const CSS = (v: string) => getComputedStyle(document.documentElement).getPropert
 // --- small dependency-free charts (app palette only) -----------------------
 function Donut({ segments }: { segments: { label: string; value: number; color: string }[] }) {
   const total = segments.reduce((a, s) => a + s.value, 0) || 1;
-  const r = 54, C = 2 * Math.PI * r;
+  const r = 44, C = 2 * Math.PI * r;
   let off = 0;
   return (
-    <svg width={150} height={150} viewBox="0 0 150 150" role="img" aria-label="Compliance overview">
-      <g transform="rotate(-90 75 75)">
-        <circle cx={75} cy={75} r={r} fill="none" stroke="var(--line)" strokeWidth={18} />
+    <svg width={124} height={124} viewBox="0 0 124 124" role="img" aria-label="Compliance overview">
+      <g transform="rotate(-90 62 62)">
+        <circle cx={62} cy={62} r={r} fill="none" stroke="var(--line)" strokeWidth={15} />
         {segments.filter((s) => s.value > 0).map((s, i) => {
           const len = (s.value / total) * C;
           const el = (
-            <circle key={i} cx={75} cy={75} r={r} fill="none" stroke={s.color} strokeWidth={18}
+            <circle key={i} cx={62} cy={62} r={r} fill="none" stroke={s.color} strokeWidth={15}
               strokeDasharray={`${len} ${C - len}`} strokeDashoffset={-off} />
           );
           off += len;
           return el;
         })}
       </g>
-      <text x={75} y={72} textAnchor="middle" fontSize={26} fontWeight={800} fill="var(--ink)">{total}</text>
-      <text x={75} y={90} textAnchor="middle" fontSize={10} fill="var(--muted)">ANALYSERS</text>
+      <text x={62} y={60} textAnchor="middle" fontSize={22} fontWeight={800} fill="var(--ink)">{total}</text>
+      <text x={62} y={76} textAnchor="middle" fontSize={9} fill="var(--muted)">ANALYSERS</text>
     </svg>
   );
 }
@@ -94,44 +94,42 @@ export function WaterQuality() {
 
       {err && <div className="err">{err}</div>}
 
-      {/* Compliance donut + over-time bars */}
+      {/* Top: compliance + over-time (left) beside the parameter KPIs (right) */}
       {summary && (
-        <section className="wq-charts">
-          <div className="panel">
-            <p className="chart-title">Compliance Overview</p>
-            <div className="donut-wrap">
-              <Donut segments={segments} />
-              <div className="legend">
-                {segments.map((s) => (
-                  <div className="li" key={s.label}>
-                    <span className="sw" style={{ background: s.color }} />{s.label}
-                    <span className="lc">{s.value}</span>
-                  </div>
-                ))}
+        <div className="wq-top">
+          <div className="wq-left">
+            <div className="panel">
+              <p className="chart-title">Compliance Overview</p>
+              <div className="donut-wrap">
+                <Donut segments={segments} />
+                <div className="legend">
+                  {segments.map((s) => (
+                    <div className="li" key={s.label}>
+                      <span className="sw" style={{ background: s.color }} />{s.label}
+                      <span className="lc">{s.value}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="panel">
-            <p className="chart-title">Water Quality Over Time</p>
-            <AxisChart
-              data={summary.overTime.map((o) => ({ label: o.label, value: o.pct }))}
-              color="var(--accent)" name="Water quality index" unit="0–100" type="bar" yMin={0} yMax={100}
-            />
-          </div>
-        </section>
-      )}
-
-      {/* Parameter KPIs with trend arrows */}
-      {summary && (
-        <section className="wq-params">
-          {summary.parameters.map((p) => (
-            <div className={`wq-tile ${stClass(p.status)}`} key={p.key}>
-              <div className="wl">{p.label}</div>
-              <div className="wv tnum">{fmt(p.avg)}{p.unit && <span className="u">{p.unit}</span>}<Arrow p={p} /></div>
-              <div className="wmeta">{p.total ? `${p.breach} breach · ${p.warn} warn / ${p.total}` : 'no data'}</div>
+            <div className="panel">
+              <p className="chart-title">Water Quality Over Time</p>
+              <AxisChart
+                data={summary.overTime.map((o) => ({ label: o.label, value: o.pct }))}
+                color="var(--accent)" name="Water quality index" unit="0–100" type="bar" yMin={0} yMax={100} height={130}
+              />
             </div>
-          ))}
-        </section>
+          </div>
+          <section className="kpi2">
+            {summary.parameters.map((p) => (
+              <div className={`wq-tile ${stClass(p.status)}`} key={p.key}>
+                <div className="wl">{p.label}</div>
+                <div className="wv tnum">{fmt(p.avg)}{p.unit && <span className="u">{p.unit}</span>}<Arrow p={p} /></div>
+                <div className="wmeta">{p.total ? `${p.breach} breach · ${p.warn} warn / ${p.total}` : 'no data'}</div>
+              </div>
+            ))}
+          </section>
+        </div>
       )}
 
       {/* Progress meters */}

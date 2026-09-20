@@ -288,7 +288,10 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .kpi { padding: 10px 12px; }
 .kpi .val { font-size: 21px; }
 .kpi .lbl { font-size: 12px; }
-.kpihero { gap: 12px; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); margin-bottom: 16px; }
+.kpihero { gap: 12px; grid-template-columns: repeat(4, 1fr); margin-bottom: 16px; }
+@media (max-width: 1000px) { .kpihero { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 680px) { .kpihero { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 440px) { .kpihero { grid-template-columns: 1fr; } }
 .kcard { padding: 13px 15px; }
 .kval { font-size: 27px; }
 .wq-params { gap: 9px; grid-template-columns: repeat(auto-fill, minmax(146px, 1fr)); margin-bottom: 14px; }

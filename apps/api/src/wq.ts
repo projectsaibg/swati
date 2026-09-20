@@ -62,6 +62,34 @@ export function evaluate(key: string, value: number): WqStatus {
 }
 const worst = (a: WqStatus, b: WqStatus): WqStatus => (RANK[a] >= RANK[b] ? a : b);
 
+/**
+ * Direction of a parameter's recent movement and whether it's an improvement.
+ * `series` is newest-first. Compares the mean of the latest samples to the mean
+ * of the preceding samples.
+ */
+export function trendFor(key: string, series: number[]): { trend: 'up' | 'down' | 'flat'; good: boolean } {
+  if (series.length < 2) return { trend: 'flat', good: true };
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const n = Math.min(3, Math.floor(series.length / 2));
+  const recent = mean(series.slice(0, n));
+  const older = mean(series.slice(n, n * 2));
+  const delta = recent - older;
+  const m = BY_KEY.get(key);
+  const eps = Math.max(1e-6, Math.abs(older) * 0.005);
+  if (Math.abs(delta) < eps) return { trend: 'flat', good: true };
+  const up = delta > 0;
+  let good: boolean;
+  if (m?.kind === 'band') {
+    const mid = (m.bandSafe![0] + m.bandSafe![1]) / 2;
+    good = Math.abs(older - mid) - Math.abs(recent - mid) > 0; // moved toward the safe centre
+  } else if (m?.kind === 'higherBetter') {
+    good = up;
+  } else {
+    good = !up; // lowerBetter / zero
+  }
+  return { trend: up ? 'up' : 'down', good };
+}
+
 @Injectable()
 export class WaterQualityService {
   constructor(private readonly prisma: PrismaService) {}
@@ -117,7 +145,16 @@ export class WaterQualityService {
 
   async summary() {
     const list = await this.analysers();
-    // Per-parameter project rollup.
+    const ids = list.map((a) => a.id);
+
+    // Recent rows (last 12h) for over-time compliance + per-parameter trend.
+    const since = new Date(Date.now() - 12 * 60 * 60 * 1000);
+    const rows = await this.prisma.measurement.findMany({
+      where: { assetId: { in: ids.length ? ids : ['none'] }, metric: { in: WQ_KEYS }, ts: { gte: since } },
+      orderBy: { ts: 'desc' }, take: 12000,
+    });
+
+    // Per-parameter project rollup + trend arrow.
     const parameters = WQ_METRICS.map((m) => {
       const vals: number[] = [];
       let breach = 0; let warn = 0; let total = 0; let st: WqStatus = 'safe';
@@ -128,8 +165,11 @@ export class WaterQualityService {
         if (p.status === 'breach') breach++; else if (p.status === 'warn') warn++;
       }
       const avg = vals.length ? Math.round((vals.reduce((x, y) => x + y, 0) / vals.length) * 100) / 100 : null;
-      return { key: m.key, label: m.label, unit: m.unit, avg, status: total ? st : null, breach, warn, total };
+      const series = rows.filter((r) => r.metric === m.key).map((r) => Number(r.value)); // newest first
+      const { trend, good } = trendFor(m.key, series);
+      return { key: m.key, label: m.label, unit: m.unit, avg, status: total ? st : null, breach, warn, total, trend, good };
     });
+
     // Per-DMA rollup.
     const byDma = new Map<string, { id: string; name: string; analyserCount: number; status: WqStatus; worstParam: string | null }>();
     for (const a of list) {
@@ -141,11 +181,50 @@ export class WaterQualityService {
       if (wp && (cur.worstParam == null)) cur.worstParam = wp.label;
       byDma.set(key, cur);
     }
+
+    // Compliance breakdown (analyser-level) for the donut.
+    let compliant = 0; let nonCompliant = 0; let underReview = 0; let pending = 0;
+    for (const a of list) {
+      const hasData = a.params.some((p) => p.value != null);
+      if (!hasData) pending++;
+      else if (a.status === 'breach') nonCompliant++;
+      else if (a.status === 'warn') underReview++;
+      else compliant++;
+    }
+
+    // Compliance % + pollution % across all parameter checks.
+    let safeChecks = 0; let warnChecks = 0; let breachChecks = 0; let totalChecks = 0;
+    for (const a of list) for (const p of a.params) {
+      if (p.status == null) continue;
+      totalChecks++;
+      if (p.status === 'safe') safeChecks++; else if (p.status === 'warn') warnChecks++; else breachChecks++;
+    }
+    const compliancePct = totalChecks ? Math.round((safeChecks / totalChecks) * 100) : 0;
+    const pollutionPct = totalChecks ? Math.round(((warnChecks + breachChecks) / totalChecks) * 100) : 0;
+
+    // Over-time compliance: bucket recent rows by hour, % of readings within limits.
+    const buckets = new Map<number, { safe: number; total: number }>();
+    for (const r of rows) {
+      const b = Math.floor(new Date(r.ts).getTime() / (60 * 60 * 1000));
+      const cur = buckets.get(b) ?? { safe: 0, total: 0 };
+      cur.total++;
+      if (evaluate(r.metric, Number(r.value)) === 'safe') cur.safe++;
+      buckets.set(b, cur);
+    }
+    const overTime = [...buckets.keys()].sort((a, b) => a - b).slice(-8).map((k) => {
+      const v = buckets.get(k)!;
+      return { label: new Date(k * 3600 * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), pct: Math.round((v.safe / v.total) * 100) };
+    });
+
     return {
       analyserCount: list.length,
       dmaCount: byDma.size,
       parameters,
       dmas: [...byDma.values()],
+      compliance: { compliant, nonCompliant, underReview, pending },
+      compliancePct,
+      pollutionPct,
+      overTime,
     };
   }
 

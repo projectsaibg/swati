@@ -178,10 +178,18 @@ export interface WqAnalyser {
   id: string; tag: string; name: string; dmaId: string | null; dmaName: string;
   transport: string | null; lastSeen: string | null; status: WqStatus; params: WqParam[];
 }
+export interface WqParamSummary {
+  key: string; label: string; unit: string; avg: number | null; status: WqStatus | null;
+  breach: number; warn: number; total: number; trend: 'up' | 'down' | 'flat'; good: boolean;
+}
 export interface WqSummary {
   analyserCount: number; dmaCount: number;
-  parameters: { key: string; label: string; unit: string; avg: number | null; status: WqStatus | null; breach: number; warn: number; total: number }[];
+  parameters: WqParamSummary[];
   dmas: { id: string; name: string; analyserCount: number; status: WqStatus; worstParam: string | null }[];
+  compliance: { compliant: number; nonCompliant: number; underReview: number; pending: number };
+  compliancePct: number;
+  pollutionPct: number;
+  overTime: { label: string; pct: number }[];
 }
 export interface WqDetail {
   id: string; tag: string; name: string; dmaName: string; transport: string | null; lastSeen: string | null;

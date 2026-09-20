@@ -407,6 +407,22 @@ model Valve {
   controllable Boolean   @default(false)
   lastOperated DateTime?
   createdAt    DateTime  @default(now())
+  ops          ValveOp[]
+}
+
+// Valve operation audit log (who changed what, when).
+model ValveOp {
+  id          String   @id @default(cuid())
+  valveId     String
+  valve       Valve    @relation(fields: [valveId], references: [id], onDelete: Cascade)
+  action      String // OPEN | CLOSE | SET
+  positionPct Decimal? @db.Decimal(5, 1)
+  fromStatus  String?
+  toStatus    String
+  operator    String
+  ts          DateTime @default(now())
+
+  @@index([valveId, ts])
 }
 
 model MaintenanceTask {

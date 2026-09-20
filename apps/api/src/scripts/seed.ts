@@ -396,6 +396,23 @@ async function main() {
     await prisma.measurement.createMany({ data: rows });
   }
 
+  // Demo valves (some remotely controllable) for the Valve Control module.
+  const valveDefs = [
+    { tag: 'VLV-01', name: 'DMA North inlet', area: 'DMA North', valveType: 'Gate', status: 'Open', positionPct: 100, controllable: true },
+    { tag: 'VLV-02', name: 'DMA North zone A', area: 'DMA North', valveType: 'Butterfly', status: 'Throttled', positionPct: 60, controllable: true },
+    { tag: 'VLV-03', name: 'DMA South inlet', area: 'DMA South', valveType: 'Gate', status: 'Open', positionPct: 100, controllable: true },
+    { tag: 'VLV-04', name: 'DMA South washout', area: 'DMA South', valveType: 'Gate', status: 'Closed', positionPct: 0, controllable: false },
+    { tag: 'VLV-05', name: 'Trunk main isolation', area: 'Transmission', valveType: 'Butterfly', status: 'Open', positionPct: 100, controllable: true },
+    { tag: 'VLV-06', name: 'Reservoir outlet', area: 'WTP', valveType: 'Gate', status: 'Throttled', positionPct: 45, controllable: true },
+  ];
+  for (const v of valveDefs) {
+    await prisma.valve.upsert({
+      where: { tag: v.tag },
+      update: { name: v.name, area: v.area, valveType: v.valveType, status: v.status, positionPct: v.positionPct, controllable: v.controllable },
+      create: v,
+    });
+  }
+
   console.log('Seed complete.');
   console.log(`Admin login: ${adminEmail}`);
   console.log(`Admin password (shown once): ${adminPassword}`);

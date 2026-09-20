@@ -173,6 +173,12 @@ export const api = {
   pumpStations: () => http.get('/pump-stations').then((r) => r.data as PumpStationSummary[]),
   pumpStation: (id: string) => http.get(`/pump-stations/${id}`).then((r) => r.data as PumpStationDetail),
 
+  // Valve Control
+  valves: () => http.get('/valves').then((r) => r.data as ValveRow[]),
+  valve: (id: string) => http.get(`/valves/${id}`).then((r) => r.data as ValveDetail),
+  operateValve: (id: string, dto: { action: 'OPEN' | 'CLOSE' | 'SET'; positionPct?: number }) =>
+    http.post(`/valves/${id}/operate`, dto).then((r) => r.data as ValveDetail),
+
   // Field Verification
   fieldVerifications: () => http.get('/field-verification').then((r) => r.data as FieldVerificationRow[]),
   createFieldVerification: (form: FormData) =>
@@ -216,6 +222,17 @@ export interface FieldVerificationRow {
   status: string; notes: string | null; latitude: number | null; longitude: number | null;
   verifiedAt: string | null; createdAt: string; photos: FieldPhoto[];
 }
+
+export interface ValveRow {
+  id: string; tag: string; name: string; area: string | null; valveType: string | null;
+  status: string; positionPct: number | null; controllable: boolean;
+  lastOperated: string | null; lastOperator: string | null;
+}
+export interface ValveOp {
+  id: string; action: string; positionPct: number | null; fromStatus: string | null;
+  toStatus: string; operator: string; ts: string;
+}
+export interface ValveDetail extends Omit<ValveRow, 'lastOperator'> { ops: ValveOp[] }
 
 export interface Series { ts: string; value: number }
 export interface PumpStationSummary {

@@ -89,7 +89,7 @@ export function Dashboard() {
   const healthAccent = avg == null ? 'cyan' : avg >= 85 ? 'green' : avg >= 70 ? 'amber' : 'red';
   const alertAccent = !s ? 'amber' : s.alerts.critical + s.alerts.alarm > 0 ? 'red' : s.alerts.watch > 0 ? 'amber' : 'teal';
 
-  const featured = NAV.filter((i) => i.key !== 'executive_overview' && isEnabled(i.key)).slice(0, 6);
+  const featured = NAV.filter((i) => i.key !== 'executive_overview' && isEnabled(i.key)).slice(0, 10);
 
   return (
     <div>

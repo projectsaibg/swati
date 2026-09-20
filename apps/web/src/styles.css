@@ -265,6 +265,13 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .charts-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 12px; }
 @media (max-width: 900px) { .charts-3 { grid-template-columns: 1fr; } }
 
+/* Featured modules: uniform 5 x 2 grid */
+.modgrid { grid-template-columns: repeat(5, 1fr); }
+@media (max-width: 1200px) { .modgrid { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 900px) { .modgrid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 620px) { .modgrid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 420px) { .modgrid { grid-template-columns: 1fr; } }
+
 /* Chart legend / empty state */
 .chart-legend { display: flex; gap: 6px; align-items: center; justify-content: center; font-size: 11px; color: var(--muted); margin-top: 4px; }
 .chart-legend .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }

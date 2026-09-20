@@ -28,9 +28,11 @@ export class DemoSimulator implements OnModuleInit, OnModuleDestroy {
     if (!process.env.DEMO_SIMULATE) return;
     const sec = Math.max(30, parseInt(process.env.DEMO_SIM_INTERVAL_SEC || '150', 10) || 150);
     this.log.log(`Demo simulator ON — new WQ readings every ${sec}s`);
-    // First tick shortly after boot, then on the interval.
-    setTimeout(() => this.tick().catch((e) => this.log.error(e)), 8000);
-    this.timer = setInterval(() => this.tick().catch((e) => this.log.error(e)), sec * 1000);
+    // First tick shortly after boot, then on the interval. Water quality +
+    // pump stations both advance so the whole showcase moves live.
+    const run = () => { Promise.allSettled([this.tick(), this.tickPumps()]); };
+    setTimeout(run, 8000);
+    this.timer = setInterval(run, sec * 1000);
   }
 
   onModuleDestroy() {
@@ -84,6 +86,68 @@ export class DemoSimulator implements OnModuleInit, OnModuleDestroy {
     if (rows.length) {
       await this.prisma.measurement.createMany({ data: rows });
       await this.prisma.connectivity.updateMany({ where: { assetId: { in: ids } }, data: { lastSeen: new Date(now) } });
+    }
+  }
+
+  // --- Pump stations -------------------------------------------------------
+  private pumpBaseline = new Map<string, Map<string, number>>();
+  private readonly ROTATE_MS = 30 * 60 * 1000;
+  private readonly PUMP_TYPES = ['MOTOR_PUMP', 'PUMP', 'MOTOR'];
+  private readonly SENSOR_METRICS: Record<string, string[]> = {
+    WATER_LEVEL: ['level_pct', 'storage_m3'],
+    PRESSURE_SENSOR: ['pressure_bar'],
+    FLOW_METER: ['net_flow_klh'],
+  };
+
+  private async sensorBaseline(assetId: string, type: string) {
+    if (this.pumpBaseline.has(assetId)) return this.pumpBaseline.get(assetId)!;
+    const metrics = this.SENSOR_METRICS[type] ?? [];
+    const rows = await this.prisma.measurement.findMany({
+      where: { assetId, metric: { in: metrics } }, orderBy: { ts: 'desc' }, take: 300,
+    });
+    const m = new Map<string, number>();
+    for (const r of rows) if (!m.has(r.metric)) m.set(r.metric, Number(r.value));
+    const fallback: Record<string, number> = { level_pct: 80, storage_m3: 96, pressure_bar: 5.5, net_flow_klh: 60 };
+    for (const k of metrics) if (!m.has(k)) m.set(k, fallback[k] ?? 1);
+    this.pumpBaseline.set(assetId, m);
+    return m;
+  }
+
+  private async tickPumps() {
+    const stations = await this.prisma.site.findMany({
+      where: { kind: 'PUMP_STATION' },
+      include: { assets: { select: { id: true, tag: true, type: true, status: true, ratedPowerKw: true } } },
+    });
+    if (stations.length === 0) return;
+    const now = Date.now();
+    const rows: { assetId: string; ts: Date; metric: string; value: number; unit: string; quality: string; source: string }[] = [];
+    const devIds: string[] = [];
+    for (const s of stations) {
+      const pumps = s.assets.filter((a) => this.PUMP_TYPES.includes(a.type)).sort((a, b) => a.tag.localeCompare(b.tag));
+      const total = pumps.length || 1;
+      const running = Math.max(1, Math.ceil(total / 2));
+      pumps.forEach((p, idx) => {
+        const on = p.status !== 'FAULT' && ((idx + Math.floor(now / this.ROTATE_MS)) % total) < running;
+        const kw = Number(p.ratedPowerKw ?? 60);
+        const power = on ? Math.round((kw * (0.82 + 0.06 * Math.sin(now / 1e6 + idx)) + (Math.random() - 0.5) * 3) * 10) / 10 : 0;
+        const flow = on ? Math.round((kw * 0.6 * (0.9 + 0.08 * Math.sin(now / 9e5 + idx)) + (Math.random() - 0.5) * 2) * 10) / 10 : 0;
+        rows.push({ assetId: p.id, ts: new Date(now), metric: 'run_state', value: on ? 1 : 0, unit: '', quality: 'good', source: 'sim' });
+        rows.push({ assetId: p.id, ts: new Date(now), metric: 'power_kw', value: power, unit: 'kW', quality: 'good', source: 'sim' });
+        rows.push({ assetId: p.id, ts: new Date(now), metric: 'flow_klh', value: flow, unit: 'kL/h', quality: 'good', source: 'sim' });
+      });
+      const sensors = s.assets.filter((a) => this.SENSOR_METRICS[a.type]);
+      for (const dev of sensors) {
+        const base = await this.sensorBaseline(dev.id, dev.type);
+        for (const [metric, b] of base) {
+          const v = Math.round((b * (1 + 0.06 * Math.sin(now / 1.2e6 + b)) + (Math.random() - 0.5) * b * 0.03) * 100) / 100;
+          rows.push({ assetId: dev.id, ts: new Date(now), metric, value: v, unit: '', quality: 'good', source: 'sim' });
+        }
+        devIds.push(dev.id);
+      }
+    }
+    if (rows.length) {
+      await this.prisma.measurement.createMany({ data: rows });
+      if (devIds.length) await this.prisma.connectivity.updateMany({ where: { assetId: { in: devIds } }, data: { lastSeen: new Date(now) } });
     }
   }
 }

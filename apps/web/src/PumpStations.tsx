@@ -1,25 +1,11 @@
 import { useEffect, useState } from 'react';
 import { PumpStationDetail, PumpStationSummary, Series, StationPump, api } from './api';
+import { AxisChart } from './charts';
 
 const statePill = (s: string) => (s === 'RUN' ? 'ok' : s === 'TRIP' ? 'alarm' : 'watch');
 const fmt = (v: number | null, dp = 1) => (v == null ? '—' : Number(v).toFixed(dp));
-
-function LineArea({ data, color }: { data: Series[]; color: string }) {
-  if (data.length < 2) return <p className="muted" style={{ textAlign: 'center' }}>No data</p>;
-  const w = 340, h = 110, pad = 6;
-  const vals = data.map((d) => d.value);
-  const min = Math.min(...vals), max = Math.max(...vals), span = max - min || 1;
-  const step = (w - pad * 2) / (data.length - 1);
-  const pts = data.map((d, i) => [pad + i * step, h - pad - ((d.value - min) / span) * (h - pad * 2)] as [number, number]);
-  const line = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
-  const area = `${line} L${pts[pts.length - 1][0].toFixed(1)},${h - pad} L${pts[0][0].toFixed(1)},${h - pad} Z`;
-  return (
-    <svg width="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ maxHeight: 120 }}>
-      <path d={area} fill={color} opacity={0.16} />
-      <path d={line} fill="none" stroke={color} strokeWidth={2} />
-    </svg>
-  );
-}
+const hhmm = (ts: string) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const toPoints = (s: Series[]) => s.map((p) => ({ label: hhmm(p.ts), value: p.value }));
 
 function Timeline({ pump }: { pump: StationPump }) {
   const segs = pump.timeline.slice(-60);
@@ -111,10 +97,10 @@ export function PumpStations() {
 
           {/* Charts */}
           <section className="wq-charts">
-            <div className="panel"><p className="chart-title">Net Flow (kL/h)</p><LineArea data={d.charts.flow} color="var(--accent)" /></div>
-            <div className="panel"><p className="chart-title">System Energy (kW)</p><LineArea data={d.charts.energy} color="var(--watch)" /></div>
+            <div className="panel"><p className="chart-title">Net Flow</p><AxisChart data={toPoints(d.charts.flow)} color="var(--accent)" name="Net flow" unit="kL/h" type="area" /></div>
+            <div className="panel"><p className="chart-title">System Energy</p><AxisChart data={toPoints(d.charts.energy)} color="var(--watch)" name="Total power" unit="kW" type="area" /></div>
           </section>
-          <div className="panel"><p className="chart-title">Tank Level (%)</p><LineArea data={d.charts.tank} color="var(--accent2)" /></div>
+          <div className="panel"><p className="chart-title">Tank Level</p><AxisChart data={toPoints(d.charts.tank)} color="var(--accent2)" name="Tank level" unit="%" type="area" yMin={0} yMax={100} /></div>
 
           {/* Per-pump drilldown */}
           <div className="sectlabel">Individual pump</div>
@@ -137,7 +123,7 @@ export function PumpStations() {
               </section>
               <div style={{ marginTop: 10 }}>
                 <strong>Power trend</strong>
-                <LineArea data={pump.powerTrend} color="var(--watch)" />
+                <AxisChart data={toPoints(pump.powerTrend)} color="var(--watch)" name="Power" unit="kW" type="area" />
               </div>
             </div>
           )}

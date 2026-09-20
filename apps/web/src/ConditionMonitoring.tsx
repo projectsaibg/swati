@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ConditionAsset, ConditionDetail, EsaResult, api } from './api';
+import { AxisChart } from './charts';
 
 function healthColor(h: number | null): string {
   if (h == null) return 'var(--muted)';
@@ -21,20 +22,6 @@ const SUBS: { key: keyof EsaResult; label: string }[] = [
   { key: 'bearingIndex', label: 'Bearing' },
   { key: 'loadIndex', label: 'Load / efficiency' },
 ];
-
-function Sparkline({ values }: { values: (number | null)[] }) {
-  const pts = values.filter((v): v is number => v != null);
-  if (pts.length < 2) return <span className="muted">Not enough history</span>;
-  const w = 320, h = 60, min = Math.min(...pts, 40), max = Math.max(...pts, 100);
-  const span = max - min || 1;
-  const step = w / (pts.length - 1);
-  const path = pts.map((v, i) => `${i === 0 ? 'M' : 'L'}${(i * step).toFixed(1)},${(h - ((v - min) / span) * h).toFixed(1)}`).join(' ');
-  return (
-    <svg width="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ maxHeight: 60 }}>
-      <path d={path} fill="none" stroke={healthColor(pts[pts.length - 1])} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 function num(v: unknown, dp = 1): string {
   if (v == null || v === '') return '—';
@@ -132,7 +119,10 @@ export function ConditionMonitoring() {
 
           <div className="panel">
             <h3 style={{ marginTop: 0 }}>Health trend</h3>
-            <Sparkline values={detail.trend.map((t) => t.healthScore)} />
+            <AxisChart
+              data={detail.trend.filter((t) => t.healthScore != null).map((t) => ({ label: new Date(t.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), value: t.healthScore as number }))}
+              color="var(--accent2)" name="Health score" unit="0–100" type="area" yMin={0} yMax={100}
+            />
           </div>
 
           {L && (

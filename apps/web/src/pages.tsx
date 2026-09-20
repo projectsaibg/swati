@@ -1,6 +1,9 @@
-import { FormEvent, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { FormEvent, useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { DashboardSummary, api } from './api';
 import { useAuth, useFeatures } from './contexts';
+import { MODULE_META, NAV } from './registry';
+import { Icon } from './icons';
 
 export function Login() {
   const { login, user } = useAuth();
@@ -45,24 +48,116 @@ export function Login() {
   );
 }
 
+function pct(n: number, d: number) {
+  if (!d) return 0;
+  return Math.max(0, Math.min(100, Math.round((n / d) * 100)));
+}
+
+function KpiCard({
+  accent, icon, label, value, unit, tag, fill, footL, footR,
+}: {
+  accent: string; icon: string; label: string; value: string; unit?: string;
+  tag?: string; fill: number; footL: React.ReactNode; footR: React.ReactNode;
+}) {
+  return (
+    <div className={`kcard ${accent}`}>
+      <div className="khead">
+        <div className="kicon"><Icon name={icon} /></div>
+        <div className="klabel">{label}</div>
+      </div>
+      <div className="krow">
+        <div className="kval tnum">{value}{unit && <span className="unit">{unit}</span>}</div>
+        {tag && <div className="ktag">{tag}</div>}
+      </div>
+      <div className="kbar"><div className="kfill" style={{ width: `${fill}%` }} /></div>
+      <div className="kfoot"><span>{footL}</span><span>{footR}</span></div>
+    </div>
+  );
+}
+
 export function Dashboard() {
-  const { features } = useFeatures();
+  const { user } = useAuth();
+  const { isEnabled } = useFeatures();
+  const [s, setS] = useState<DashboardSummary | null>(null);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    api.dashboardSummary().then(setS).catch(() => setErr('Could not load live metrics.'));
+  }, []);
+
+  const avg = s?.health.avg ?? null;
+  const healthAccent = avg == null ? 'cyan' : avg >= 85 ? 'green' : avg >= 70 ? 'amber' : 'red';
+  const alertAccent = !s ? 'amber' : s.alerts.critical + s.alerts.alarm > 0 ? 'red' : s.alerts.watch > 0 ? 'amber' : 'teal';
+
+  const featured = NAV.filter((i) => i.key !== 'executive_overview' && isEnabled(i.key)).slice(0, 6);
+
   return (
     <div>
-      <h1 className="pagetitle">Executive overview</h1>
-      <div className="panel">
-        <p className="muted">
-          Welcome to SWATI. This is the M2 shell: the sidebar and routes are built
-          dynamically from the {features.length} enabled feature(s). Module content
-          lands in M3+.
-        </p>
+      <div className="exec-head">
+        <div>
+          <h1 className="exec-title">EXECUTIVE OVERVIEW</h1>
+          <p className="exec-sub">Real-time water operations command center{user ? ` · ${user.name}` : ''}</p>
+        </div>
+        <div className="statuspills">
+          <span className="spill"><Icon name="shieldcheck" size={15} /> SECURE</span>
+          <span className="spill live"><span className="livedot" /> LIVE</span>
+        </div>
       </div>
-      <section className="kpi-grid">
-        <div className="kpi"><div className="val tnum">{features.length}</div><div className="lbl">Enabled features</div></div>
-        <div className="kpi"><div className="val tnum">—</div><div className="lbl">Assets</div></div>
-        <div className="kpi"><div className="val tnum">—</div><div className="lbl">Open alarms</div></div>
-        <div className="kpi"><div className="val tnum">—</div><div className="lbl">Avg health</div></div>
+
+      {err && <div className="err">{err}</div>}
+
+      <section className="kpihero">
+        <KpiCard
+          accent="cyan" icon="layers" label="Asset fleet"
+          value={s ? String(s.assets.total) : '—'} tag="assets"
+          fill={s ? pct(s.assets.running, s.assets.total) : 0}
+          footL={<><span className="strong">{s?.assets.running ?? '—'}</span> running</>}
+          footR={<><span className="strong">{s?.assets.fault ?? '—'}</span> in fault</>}
+        />
+        <KpiCard
+          accent={alertAccent} icon="alert" label="Open alerts"
+          value={s ? String(s.alerts.open) : '—'} tag="require action"
+          fill={s && s.alerts.open ? pct(s.alerts.critical + s.alerts.alarm, s.alerts.open) : 0}
+          footL={<><span className="strong">{s?.alerts.critical ?? '—'}</span> critical</>}
+          footR={<><span className="strong">{s?.alerts.alarm ?? '—'}</span> alarm</>}
+        />
+        <KpiCard
+          accent="teal" icon="cpu" label="Devices online"
+          value={s ? String(s.devices.online) : '—'} tag={s ? `of ${s.devices.total}` : ''}
+          fill={s ? pct(s.devices.online, s.devices.total) : 0}
+          footL={<><span className="strong">{s?.devices.online ?? '—'}</span> online</>}
+          footR={<><span className="strong">{s?.devices.offline ?? '—'}</span> offline</>}
+        />
+        <KpiCard
+          accent={healthAccent} icon="heart" label="Avg asset health"
+          value={avg == null ? '—' : String(avg)} unit={avg == null ? undefined : '%'} tag="fleet mean"
+          fill={avg ?? 0}
+          footL={<>min <span className="strong">{s?.health.min ?? '—'}</span></>}
+          footR={s ? new Date(s.updatedAt).toLocaleTimeString() : ''}
+        />
       </section>
+
+      {featured.length > 0 && (
+        <>
+          <div className="sectlabel">Featured modules</div>
+          <section className="modgrid">
+            {featured.map((i) => {
+              const m = MODULE_META[i.key] ?? { icon: 'grid', desc: 'Module.', accent: 'cyan' as string };
+              return (
+                <div className={`modcard ${m.accent}`} key={i.key}>
+                  <div className="modtop">
+                    <div className="modicon"><Icon name={m.icon} size={22} /></div>
+                    {m.badge && <span className="badge">{m.badge}</span>}
+                  </div>
+                  <h3>{i.label}</h3>
+                  <p className="desc">{m.desc}</p>
+                  <Link className="modtrack" to={i.path}>Open</Link>
+                </div>
+              );
+            })}
+          </section>
+        </>
+      )}
     </div>
   );
 }
@@ -72,7 +167,7 @@ export function ModulePlaceholder({ label }: { label: string }) {
     <div>
       <h1 className="pagetitle">{label}</h1>
       <div className="panel">
-        <p className="muted">This module is enabled. Its screens are built in a later milestone (M3+).</p>
+        <p className="muted">This module is enabled. Its screens are built in a later milestone.</p>
       </div>
     </div>
   );

@@ -2,8 +2,17 @@ import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom';
 import { AuthProvider, FeaturesProvider, useAuth, useFeatures } from './contexts';
 import { Layout, RequireAdmin, RequireAuth } from './ui';
 import { Dashboard, Login, ModulePlaceholder } from './pages';
+import { ActionCenter } from './ActionCenter';
+import { MapPage } from './MapPage';
 import { Admin } from './Admin';
 import { NAV } from './registry';
+import { ReactNode } from 'react';
+
+// Feature keys that have real screens; everything else uses the placeholder.
+const PAGE_COMPONENTS: Record<string, ReactNode> = {
+  interactive_map: <MapPage />,
+  action_center: <ActionCenter />,
+};
 
 function AppRoutes() {
   const { loading: aLoading } = useAuth();
@@ -22,7 +31,8 @@ function AppRoutes() {
 
       {/* One route per enabled feature (skip root, handled above) */}
       {NAV.filter((i) => i.path !== '/' && isEnabled(i.key)).map((i) => {
-        const page = <Layout><ModulePlaceholder label={i.label} /></Layout>;
+        const content = PAGE_COMPONENTS[i.key] ?? <ModulePlaceholder label={i.label} />;
+        const page = <Layout>{content}</Layout>;
         const element = visibility(i.key) === 'LOGIN' ? <RequireAuth>{page}</RequireAuth> : page;
         return <Route key={i.key} path={i.path} element={element} />;
       })}

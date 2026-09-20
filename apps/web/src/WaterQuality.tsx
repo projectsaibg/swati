@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { WqAnalyser, WqDetail, WqParamSummary, WqStatus, WqSummary, api } from './api';
+import { AxisChart } from './charts';
 
 const stClass = (s: WqStatus | null) => (s ? `st-${s}` : 'st-none');
 function fmt(v: number | null): string {
@@ -33,32 +34,6 @@ function Donut({ segments }: { segments: { label: string; value: number; color: 
   );
 }
 
-function Bars({ data }: { data: { label: string; pct: number }[] }) {
-  if (!data.length) return <p className="muted" style={{ textAlign: 'center' }}>No time-series yet.</p>;
-  const W = 340, H = 170, base = 130, top = 12, n = data.length;
-  const slot = W / n, bw = Math.min(38, slot * 0.55);
-  const col = (p: number) => (p >= 85 ? 'var(--ok)' : p >= 60 ? 'var(--watch)' : 'var(--alarm)');
-  return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Compliance over time">
-      {[0, 50, 100].map((g) => {
-        const y = base - (g / 100) * (base - top);
-        return <line key={g} x1={0} x2={W} y1={y} y2={y} stroke="var(--line)" strokeWidth={1} opacity={0.5} />;
-      })}
-      {data.map((d, i) => {
-        const x = i * slot + (slot - bw) / 2;
-        const h = (d.pct / 100) * (base - top);
-        return (
-          <g key={i}>
-            <rect x={x} y={base - h} width={bw} height={h} rx={3} fill={col(d.pct)} />
-            <text x={x + bw / 2} y={base - h - 4} textAnchor="middle" fontSize={10} fill="var(--muted)">{d.pct}</text>
-            <text x={x + bw / 2} y={base + 14} textAnchor="middle" fontSize={9} fill="var(--muted)">{d.label}</text>
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
 function Arrow({ p }: { p: WqParamSummary }) {
   if (p.trend === 'flat') return <span className="muted kpi-arrow">–</span>;
   const color = p.good ? 'var(--ok)' : 'var(--alarm)';
@@ -69,14 +44,6 @@ function Arrow({ p }: { p: WqParamSummary }) {
         : <polygon points="2,3 12,3 7,12" fill={color} />}
     </svg>
   );
-}
-
-function Spark({ values }: { values: number[] }) {
-  if (values.length < 2) return <span className="muted">Not enough history</span>;
-  const w = 300, h = 44, min = Math.min(...values), max = Math.max(...values);
-  const span = max - min || 1, step = w / (values.length - 1);
-  const d = values.map((v, i) => `${i === 0 ? 'M' : 'L'}${(i * step).toFixed(1)},${(h - ((v - min) / span) * h).toFixed(1)}`).join(' ');
-  return <svg width="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ maxHeight: 44 }}><path d={d} fill="none" stroke="var(--accent)" strokeWidth={2} /></svg>;
 }
 
 export function WaterQuality() {
@@ -145,8 +112,11 @@ export function WaterQuality() {
             </div>
           </div>
           <div className="panel">
-            <p className="chart-title">Compliance Over Time</p>
-            <Bars data={summary.overTime} />
+            <p className="chart-title">Water Quality Over Time</p>
+            <AxisChart
+              data={summary.overTime.map((o) => ({ label: o.label, value: o.pct }))}
+              color="var(--accent)" name="Water quality index" unit="0–100" type="bar" yMin={0} yMax={100}
+            />
           </div>
         </section>
       )}
@@ -236,7 +206,13 @@ export function WaterQuality() {
           </section>
           <div style={{ marginTop: 8 }}>
             <strong>Trend — {detail.params.find((p) => p.key === trendKey)?.label ?? trendKey}</strong>
-            <Spark values={(detail.trends[trendKey] ?? []).map((t) => t.value)} />
+            <AxisChart
+              data={(detail.trends[trendKey] ?? []).map((t) => ({ label: new Date(t.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), value: t.value }))}
+              color="var(--accent)"
+              name={detail.params.find((p) => p.key === trendKey)?.label ?? trendKey}
+              unit={detail.params.find((p) => p.key === trendKey)?.unit ?? ''}
+              type="area"
+            />
           </div>
         </div>
       )}

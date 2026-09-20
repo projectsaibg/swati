@@ -1,0 +1,481 @@
+// SWATI — Prisma schema (PostgreSQL + TimescaleDB)
+// Encodes the locked Phase 1 decisions:
+//  - Feature entitlements + tiers (Vector/Velocity/Quantum) + per-feature visibility
+//  - Admin-defined role ladder (rank + reports_to) with per-user manager override
+//  - Chain-of-command messaging; evidence attachments (server timestamp + EXIF/GPS)
+//  - Asset readings as a time-series (readings becomes a Timescale hypertable via
+//    a raw migration: SELECT create_hypertable('readings','ts'); )
+//
+// Generate:  npx prisma generate
+// Migrate:   npx prisma migrate dev --name init   (then apply the hypertable SQL)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+enum Tier {
+  BASE
+  VECTOR
+  VELOCITY
+  QUANTUM
+}
+
+enum FeatureVisibility {
+  PUBLIC // shown on the no-login public view
+  LOGIN  // visible only after login
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum AssetType {
+  MOTOR
+  PUMP
+  MOTOR_PUMP
+  RESERVOIR
+  WTP
+  OHT
+  DMA
+  PIPELINE
+  FLOW_METER
+  PRESSURE_SENSOR
+  WATER_LEVEL
+  CHLORINATOR
+}
+
+enum Transport {
+  MQTT
+  LORAWAN
+  WIFI
+  SIM
+  RTU_MODBUS
+  HTTP
+}
+
+enum AssetStatus {
+  RUNNING
+  STOPPED
+  FAULT
+}
+
+enum Severity {
+  INFO
+  WATCH
+  ALARM
+  CRITICAL
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  CLOSED
+}
+
+enum MessageStatus {
+  SENT
+  READ
+  ACKNOWLEDGED
+  ESCALATED
+}
+
+enum AttachmentOwner {
+  REPORT
+  FIELD_VERIFICATION
+  MESSAGE
+}
+
+// ---------------------------------------------------------------------------
+// Platform: deployment, entitlements, tiers, feature flags
+// ---------------------------------------------------------------------------
+model Deployment {
+  id        String        @id @default(cuid())
+  name      String
+  tier      Tier          @default(VECTOR) // cumulative edition preset
+  createdAt DateTime      @default(now())
+  features  FeatureFlag[]
+}
+
+// One row per feature per deployment. Tier sets the preset; enabled/visibility
+// are the admin overrides.
+model FeatureFlag {
+  id           String            @id @default(cuid())
+  deploymentId String
+  deployment   Deployment        @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
+  key          String // e.g. "water_quality", "valve_control", "digital_twin"
+  enabled      Boolean           @default(false)
+  visibility   FeatureVisibility @default(LOGIN)
+  updatedAt    DateTime          @updatedAt
+
+  @@unique([deploymentId, key])
+}
+
+// ---------------------------------------------------------------------------
+// People: role ladder (rank + reports_to) + users (with manager override)
+// ---------------------------------------------------------------------------
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  rank        Int // higher = more senior
+  permissions Json     @default("[]") // list of permission keys
+  reportsToId String?
+  reportsTo   Role?    @relation("RoleLadder", fields: [reportsToId], references: [id])
+  reports     Role[]   @relation("RoleLadder")
+  users       User[]
+  createdAt   DateTime @default(now())
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String
+  passwordHash String
+  status       UserStatus @default(ACTIVE)
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id])
+  managerId    String? // per-user reporting-line override
+  manager      User?      @relation("UserManager", fields: [managerId], references: [id])
+  reports      User[]     @relation("UserManager")
+  createdAt    DateTime   @default(now())
+  lastLogin    DateTime?
+
+  sentMessages     Message[]    @relation("MessageFrom")
+  receivedMessages Message[]    @relation("MessageTo")
+  attachments      Attachment[]
+}
+
+// ---------------------------------------------------------------------------
+// Geography + assets
+// ---------------------------------------------------------------------------
+model Site {
+  id        String   @id @default(cuid())
+  name      String
+  latitude  Decimal? @db.Decimal(10, 7)
+  longitude Decimal? @db.Decimal(10, 7)
+  createdAt DateTime @default(now())
+  assets    Asset[]
+}
+
+model Asset {
+  id            String      @id @default(cuid())
+  tag           String      @unique
+  name          String
+  type          AssetType   @default(MOTOR_PUMP)
+  siteId        String?
+  site          Site?       @relation(fields: [siteId], references: [id])
+  latitude      Decimal?    @db.Decimal(10, 7)
+  longitude     Decimal?    @db.Decimal(10, 7)
+  ratedPowerKw  Decimal?    @db.Decimal(10, 2)
+  ratedVoltageV Decimal?    @db.Decimal(10, 2)
+  ratedCurrentA Decimal?    @db.Decimal(10, 2)
+  ratedSpeedRpm Int?
+  ratedFlowM3h  Decimal?    @db.Decimal(10, 2)
+  ratedHeadM    Decimal?    @db.Decimal(10, 2)
+  status        AssetStatus @default(RUNNING)
+  installedOn   DateTime?
+  createdAt     DateTime    @default(now())
+  readings      Reading[]
+  alerts        Alert[]
+  connectivity  Connectivity?
+  measurements  Measurement[]
+}
+
+// Time-series. After `prisma migrate`, run:
+//   SELECT create_hypertable('readings','ts', migrate_data => true);
+// and consider compression + retention policies.
+model Reading {
+  id                  String   @id @default(cuid())
+  assetId             String
+  asset               Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  ts                  DateTime
+  voltageV            Decimal? @db.Decimal(10, 2)
+  currentA            Decimal? @db.Decimal(10, 2)
+  powerFactor         Decimal? @db.Decimal(5, 3)
+  inputPowerKw        Decimal? @db.Decimal(10, 3)
+  efficiencyPct       Decimal? @db.Decimal(5, 2)
+  voltageUnbalancePct Decimal? @db.Decimal(5, 2)
+  currentUnbalancePct Decimal? @db.Decimal(5, 2)
+  thdVoltagePct       Decimal? @db.Decimal(5, 2)
+  thdCurrentPct       Decimal? @db.Decimal(5, 2)
+  loadPct             Decimal? @db.Decimal(5, 2)
+  speedRpm            Int?
+  vibrationMmS        Decimal? @db.Decimal(6, 2)
+  windingTempC        Decimal? @db.Decimal(6, 2)
+  bearingTempC        Decimal? @db.Decimal(6, 2)
+  statorIndex         Decimal? @db.Decimal(5, 1)
+  rotorIndex          Decimal? @db.Decimal(5, 1)
+  bearingIndex        Decimal? @db.Decimal(5, 1)
+  eccentricityIndex   Decimal? @db.Decimal(5, 1)
+  supplyIndex         Decimal? @db.Decimal(5, 1)
+  loadIndex           Decimal? @db.Decimal(5, 1)
+  flowM3h             Decimal? @db.Decimal(10, 2)
+  headM               Decimal? @db.Decimal(10, 2)
+  specificEnergyKwhM3 Decimal? @db.Decimal(8, 3)
+  healthScore         Decimal? @db.Decimal(5, 1)
+  source              String   @default("demo") // demo|manual|csv|api|scada
+  createdAt           DateTime @default(now())
+
+  @@index([assetId, ts])
+}
+
+model Alert {
+  id        String      @id @default(cuid())
+  assetId   String
+  asset     Asset       @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  category  String
+  severity  Severity
+  message   String
+  metric    String?
+  valueNum  Decimal?    @db.Decimal(12, 3)
+  status    AlertStatus @default(OPEN)
+  createdAt DateTime    @default(now())
+
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// IoT connectivity + generic device telemetry
+//
+// Connectivity: one row per instrumented asset, describing HOW the device
+// reaches us. `transport` is the link (MQTT / LoRaWAN / WiFi / SIM / Modbus /
+// HTTP); `config` is a flexible JSON bag for transport-specific fields
+// (broker/topic, DevEUI/AppKey, APN, Modbus register map, HTTP ingest key...)
+// so new device families need no schema change. Phase 1 ingests over HTTP;
+// the MQTT/LoRa broker bridge lands in Phase 2 and writes the same tables.
+model Connectivity {
+  id        String    @id @default(cuid())
+  assetId   String    @unique
+  asset     Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  transport Transport @default(HTTP)
+  config    Json      @default("{}")
+  gatewayId String? // RTU / gateway / modem identifier
+  lastSeen  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+// Generic device time-series for the sensor families (flow meters, pressure,
+// water level, chlorinator, ...). The rich motor ESA channels stay in
+// `Reading`; this is the narrow (metric, value, unit) shape everything else
+// reports. After migrate, promote to a Timescale hypertable:
+//   SELECT create_hypertable('measurements','ts', migrate_data => true);
+model Measurement {
+  id        String   @id @default(cuid())
+  assetId   String
+  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  ts        DateTime
+  metric    String // e.g. flow_m3h, pressure_bar, level_m, residual_cl_mgl
+  value     Decimal  @db.Decimal(18, 4)
+  unit      String?
+  quality   String? // good|suspect|bad (sensor self-report or validation)
+  source    String   @default("api") // api|mqtt|lorawan|modbus|manual|demo
+  createdAt DateTime @default(now())
+
+  @@index([assetId, ts])
+  @@index([assetId, metric, ts])
+}
+
+// ---------------------------------------------------------------------------
+// Chain-of-command communication
+// ---------------------------------------------------------------------------
+model Message {
+  id          String        @id @default(cuid())
+  fromId      String
+  from        User          @relation("MessageFrom", fields: [fromId], references: [id])
+  toId        String
+  to          User          @relation("MessageTo", fields: [toId], references: [id])
+  parentId    String?
+  parent      Message?      @relation("MessageThread", fields: [parentId], references: [id])
+  replies     Message[]     @relation("MessageThread")
+  subject     String
+  body        String?
+  status      MessageStatus @default(SENT)
+  assetTag    String?
+  area        String?
+  createdAt   DateTime      @default(now())
+  attachments Attachment[]
+
+  @@index([toId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Evidence attachments (object storage keys + authoritative server timestamp)
+// ---------------------------------------------------------------------------
+model Attachment {
+  id          String          @id @default(cuid())
+  ownerType   AttachmentOwner
+  ownerId     String // report id / field-verification id / message id
+  storageKey  String // MinIO/S3 object key
+  uploaderId  String
+  uploader    User            @relation(fields: [uploaderId], references: [id])
+  uploadedAt  DateTime        @default(now()) // authoritative (server) timestamp
+  exifTakenAt DateTime? // supporting, may be spoofed
+  gpsLat      Decimal?        @db.Decimal(10, 7)
+  gpsLng      Decimal?        @db.Decimal(10, 7)
+  watermarked Boolean         @default(false)
+  message     Message?        @relation(fields: [ownerId], references: [id], map: "att_message_fk")
+
+  @@index([ownerType, ownerId])
+}
+
+// ---------------------------------------------------------------------------
+// Domain modules (ported from the validated PHP schema)
+// ---------------------------------------------------------------------------
+model Personnel {
+  id         String   @id @default(cuid())
+  name       String
+  role       String
+  department String?
+  area       String?
+  phone      String?
+  email      String?
+  status     String   @default("Active")
+  createdAt  DateTime @default(now())
+}
+
+model WaterQualitySample {
+  id           String   @id @default(cuid())
+  location     String
+  sampleTime   DateTime
+  ph           Decimal? @db.Decimal(4, 2)
+  turbidityNtu Decimal? @db.Decimal(6, 2)
+  chlorineMgl  Decimal? @db.Decimal(5, 2)
+  tdsMgl       Decimal? @db.Decimal(7, 1)
+  ecoli        String?
+  status       String   @default("Safe")
+  createdAt    DateTime @default(now())
+}
+
+model BillingSummary {
+  id              String   @id @default(cuid())
+  area            String
+  period          String // YYYY-MM
+  connections     Int      @default(0)
+  billedAmount    Decimal  @default(0) @db.Decimal(14, 2)
+  collectedAmount Decimal  @default(0) @db.Decimal(14, 2)
+  arrearsAmount   Decimal  @default(0) @db.Decimal(14, 2)
+  createdAt       DateTime @default(now())
+}
+
+model Accountability {
+  id        String   @id @default(cuid())
+  officer   String
+  area      String?
+  kpi       String
+  target    Decimal? @db.Decimal(12, 2)
+  actual    Decimal? @db.Decimal(12, 2)
+  unit      String?
+  period    String?
+  status    String   @default("On track")
+  createdAt DateTime @default(now())
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  title       String
+  category    String
+  period      String?
+  summary     String?
+  generatedBy String?
+  createdAt   DateTime @default(now())
+}
+
+model Valve {
+  id           String    @id @default(cuid())
+  tag          String    @unique
+  name         String
+  area         String?
+  valveType    String?
+  status       String    @default("Open")
+  positionPct  Decimal?  @db.Decimal(5, 1)
+  controllable Boolean   @default(false)
+  lastOperated DateTime?
+  createdAt    DateTime  @default(now())
+}
+
+model MaintenanceTask {
+  id         String    @id @default(cuid())
+  assetTag   String?
+  title      String
+  taskType   String    @default("Preventive")
+  priority   String    @default("Medium")
+  assignedTo String?
+  dueDate    DateTime?
+  status     String    @default("Open")
+  createdAt  DateTime  @default(now())
+}
+
+model NrwRecord {
+  id        String   @id @default(cuid())
+  area      String
+  period    String
+  inputKl   Decimal  @default(0) @db.Decimal(14, 2)
+  billedKl  Decimal  @default(0) @db.Decimal(14, 2)
+  nrwPct    Decimal? @db.Decimal(5, 2)
+  createdAt DateTime @default(now())
+}
+
+model IlkDetection {
+  id         String    @id @default(cuid())
+  ref        String
+  area       String?
+  kind       String    @default("Illegal connection")
+  severity   String    @default("Medium")
+  estLossKl  Decimal?  @db.Decimal(12, 2)
+  status     String    @default("Detected")
+  latitude   Decimal?  @db.Decimal(10, 7)
+  longitude  Decimal?  @db.Decimal(10, 7)
+  detectedAt DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+model NetworkSegment {
+  id          String   @id @default(cuid())
+  name        String
+  zone        String?
+  diameterMm  Int?
+  lengthM     Decimal? @db.Decimal(10, 1)
+  flowM3h     Decimal? @db.Decimal(10, 2)
+  pressureBar Decimal? @db.Decimal(6, 2)
+  status      String   @default("Normal")
+  createdAt   DateTime @default(now())
+}
+
+model FieldVerification {
+  id         String    @id @default(cuid())
+  ref        String
+  location   String?
+  category   String?
+  verifier   String?
+  status     String    @default("Pending")
+  notes      String?
+  latitude   Decimal?  @db.Decimal(10, 7)
+  longitude  Decimal?  @db.Decimal(10, 7)
+  verifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+// GIS layers imported from XLS / CSV / KML (parsed to GeoJSON)
+model GisLayer {
+  id         String   @id @default(cuid())
+  name       String
+  sourceType String // xls|csv|kml|geojson
+  geojson    Json
+  uploadedBy String?
+  createdAt  DateTime @default(now())
+}
+
+model AppSetting {
+  key       String   @id
+  value     String?
+  updatedAt DateTime @updatedAt
+}

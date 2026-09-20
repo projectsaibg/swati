@@ -1,0 +1,103 @@
+﻿# SWATI production stack â€” sized for Hostinger KVM 4 (4 vCPU / 16 GB / 200 GB NVMe)
+# Everything self-contained on one box. `docker compose up -d` to run.
+# Memory limits below leave headroom on 16 GB; adjust as load grows.
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./apps/web/dist:/srv/web:ro          # built React static assets
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    mem_limit: 256m
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: ${S3_BUCKET}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      INGEST_API_KEY: ${INGEST_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    expose:
+      - "3000"
+    mem_limit: 2g
+
+  # Background worker (alerts, scheduled scans, Phase 2 ingestion). Same image,
+  # different entrypoint. Uncomment when the jobs module lands.
+  # worker:
+  #   build: { context: ./apps/api, dockerfile: Dockerfile }
+  #   restart: unless-stopped
+  #   command: ["node", "dist/worker.js"]
+  #   depends_on: [db, redis]
+  #   mem_limit: 1g
+
+  db:
+    image: timescale/timescaledb:latest-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    shm_size: 512m
+    mem_limit: 6g
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--maxmemory", "384mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis_data:/data
+    mem_limit: 512m
+
+  minio:
+    image: quay.io/minio/minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    expose:
+      - "9000"
+      - "9001"
+    mem_limit: 1g
+
+volumes:
+  db_data:
+  redis_data:
+  minio_data:
+  caddy_data:
+  caddy_config:
+

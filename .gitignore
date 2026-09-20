@@ -1,0 +1,32 @@
+# --- Secrets (NEVER commit) ---
+.env
+.env.*
+!.env.example
+
+# --- Dependencies ---
+node_modules/
+**/node_modules/
+
+# --- Build output ---
+dist/
+**/dist/
+build/
+*.tsbuildinfo
+
+# --- Prisma generated client ---
+**/generated/
+
+# --- tsc-generated config artifacts ---
+apps/web/vite.config.js
+apps/web/vite.config.d.ts
+
+# --- Local tooling / scratch ---
+.claude-flow/
+*.log
+npm-debug.log*
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

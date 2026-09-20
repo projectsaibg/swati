@@ -7,6 +7,7 @@ import { MapPage } from './MapPage';
 import { ConditionMonitoring } from './ConditionMonitoring';
 import { WaterQuality } from './WaterQuality';
 import { PumpStations } from './PumpStations';
+import { FieldVerification } from './FieldVerification';
 import { Admin } from './Admin';
 import { NAV } from './registry';
 import { ReactNode } from 'react';
@@ -18,6 +19,7 @@ const PAGE_COMPONENTS: Record<string, ReactNode> = {
   condition_monitoring: <ConditionMonitoring />,
   water_quality: <WaterQuality />,
   pump_stations: <PumpStations />,
+  field_verification: <FieldVerification />,
 };
 
 function AppRoutes() {

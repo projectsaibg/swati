@@ -327,6 +327,75 @@ async function main() {
     await prisma.measurement.createMany({ data: wqRows });
   }
 
+  // Pump stations (pump houses): each has 3-4 pumps on a duty rotation so every
+  // pump rests, plus station sensors (tank / pressure / flow) as devices.
+  const ROTATE_MS = 30 * 60 * 1000;
+  const dutyOn = (idx: number, total: number, t: number) => {
+    const running = Math.max(1, Math.ceil(total / 2));
+    return ((idx + Math.floor(t / ROTATE_MS)) % total) < running;
+  };
+  const PS_STEPS = 72; // 6h at 5-min spacing
+  const stationDefs = [
+    { name: 'Pumphouse Alpha', lat: 15.205, lng: 74.116, pumps: 4, kw: 75, flow: 45, faultIdx: -1 },
+    { name: 'Pumphouse Beta', lat: 15.198, lng: 74.128, pumps: 3, kw: 55, flow: 32, faultIdx: 2 },
+  ];
+  for (const st of stationDefs) {
+    let site = await prisma.site.findFirst({ where: { name: st.name, kind: 'PUMP_STATION' } });
+    if (!site) site = await prisma.site.create({ data: { name: st.name, kind: 'PUMP_STATION', latitude: st.lat, longitude: st.lng } });
+    const abbr = st.name.split(' ')[1].slice(0, 1).toUpperCase(); // A / B
+    const rows: any[] = [];
+
+    // Pumps
+    for (let i = 0; i < st.pumps; i++) {
+      const tag = `PS-${abbr}-P${i + 1}`;
+      const faulted = i === st.faultIdx;
+      const pump = await prisma.asset.upsert({
+        where: { tag },
+        update: { siteId: site.id, type: 'MOTOR_PUMP', status: faulted ? 'FAULT' : 'RUNNING', ratedPowerKw: st.kw },
+        create: { tag, name: `${st.name} pump ${i + 1}`, type: 'MOTOR_PUMP', siteId: site.id, status: faulted ? 'FAULT' : 'RUNNING', ratedPowerKw: st.kw, ratedVoltageV: 415, ratedCurrentA: st.kw * 1.8, ratedSpeedRpm: 1480 },
+      });
+      await prisma.reading.deleteMany({ where: { assetId: pump.id, source: 'ps-demo' } });
+      await prisma.reading.create({ data: { assetId: pump.id, ts: new Date(now), healthScore: faulted ? 46 : 88 + i * 2, source: 'ps-demo' } });
+      await prisma.measurement.deleteMany({ where: { assetId: pump.id, source: { in: ['demo', 'sim'] } } });
+      for (let step = 0; step < PS_STEPS; step++) {
+        const t = now - (PS_STEPS - 1 - step) * 5 * 60 * 1000;
+        const on = !faulted && dutyOn(i, st.pumps, t);
+        const power = on ? Math.round((st.kw * (0.82 + 0.06 * Math.sin(step / 6 + i)) + (Math.random() - 0.5) * 3) * 10) / 10 : 0;
+        const flow = on ? Math.round((st.flow * (0.9 + 0.08 * Math.sin(step / 5 + i)) + (Math.random() - 0.5) * 2) * 10) / 10 : 0;
+        rows.push({ assetId: pump.id, ts: new Date(t), metric: 'run_state', value: on ? 1 : 0, unit: '', quality: 'good', source: 'demo' });
+        rows.push({ assetId: pump.id, ts: new Date(t), metric: 'power_kw', value: power, unit: 'kW', quality: 'good', source: 'demo' });
+        rows.push({ assetId: pump.id, ts: new Date(t), metric: 'flow_klh', value: flow, unit: 'kL/h', quality: 'good', source: 'demo' });
+      }
+    }
+
+    // Station sensors: tank (level), pressure, flow.
+    const devs: { tag: string; type: string; metric: string; unit: string; base: number; also?: { metric: string; unit: string; factor: number } }[] = [
+      { tag: `PS-${abbr}-TANK`, type: 'WATER_LEVEL', metric: 'level_pct', unit: '%', base: 82, also: { metric: 'storage_m3', unit: 'm3', factor: 1.2 } },
+      { tag: `PS-${abbr}-PRES`, type: 'PRESSURE_SENSOR', metric: 'pressure_bar', unit: 'bar', base: 5.6 },
+      { tag: `PS-${abbr}-FLOW`, type: 'FLOW_METER', metric: 'net_flow_klh', unit: 'kL/h', base: st.flow * 1.6 },
+    ];
+    for (const d of devs) {
+      const asset = await prisma.asset.upsert({
+        where: { tag: d.tag },
+        update: { siteId: site.id, type: d.type as any },
+        create: { tag: d.tag, name: `${st.name} ${d.type}`, type: d.type as any, siteId: site.id },
+      });
+      await prisma.connectivity.upsert({
+        where: { assetId: asset.id },
+        update: { transport: 'RTU_MODBUS', lastSeen: new Date() },
+        create: { assetId: asset.id, transport: 'RTU_MODBUS', config: {} as any, gatewayId: `RTU-${abbr}`, lastSeen: new Date() },
+      });
+      await prisma.measurement.deleteMany({ where: { assetId: asset.id, source: { in: ['demo', 'sim'] } } });
+      for (let step = 0; step < PS_STEPS; step++) {
+        const t = now - (PS_STEPS - 1 - step) * 5 * 60 * 1000;
+        const v = Math.round((d.base * (1 + 0.08 * Math.sin(step / 7)) + (Math.random() - 0.5) * (d.base * 0.03)) * 100) / 100;
+        rows.push({ assetId: asset.id, ts: new Date(t), metric: d.metric, value: v, unit: d.unit, quality: 'good', source: 'demo' });
+        if (d.also) rows.push({ assetId: asset.id, ts: new Date(t), metric: d.also.metric, value: Math.round(v * d.also.factor * 10) / 10, unit: d.also.unit, quality: 'good', source: 'demo' });
+      }
+    }
+    await prisma.measurement.createMany({ data: rows });
+  }
+
   console.log('Seed complete.');
   console.log(`Admin login: ${adminEmail}`);
   console.log(`Admin password (shown once): ${adminPassword}`);

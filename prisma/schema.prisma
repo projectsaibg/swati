@@ -69,6 +69,12 @@ enum AssetStatus {
   FAULT
 }
 
+enum SiteKind {
+  DMA
+  PUMP_STATION
+  OTHER
+}
+
 enum Severity {
   INFO
   WATCH
@@ -160,6 +166,7 @@ model User {
 model Site {
   id        String   @id @default(cuid())
   name      String
+  kind      SiteKind @default(OTHER)
   latitude  Decimal? @db.Decimal(10, 7)
   longitude Decimal? @db.Decimal(10, 7)
   createdAt DateTime @default(now())

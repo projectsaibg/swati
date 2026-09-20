@@ -35,6 +35,7 @@ export const FEATURE_REGISTRY: FeatureDef[] = [
   { key: 'billing', module: 'Billing & Revenue', tier: 'VELOCITY', visibility: 'LOGIN' },
   { key: 'maintenance', module: 'Maintenance', tier: 'VELOCITY', visibility: 'LOGIN' },
   { key: 'condition_monitoring', module: 'Pump/Motor ESA', tier: 'VELOCITY', visibility: 'PUBLIC' },
+  { key: 'pump_stations', module: 'Pump Stations', tier: 'VECTOR', visibility: 'PUBLIC' },
   { key: 'predictive', module: 'Predictive Analysis', tier: 'QUANTUM', visibility: 'LOGIN' },
   { key: 'chatbot', module: 'AI Assistant', tier: 'QUANTUM', visibility: 'LOGIN' },
   { key: 'digital_twin', module: 'Digital Twin', tier: 'QUANTUM', visibility: 'PUBLIC' },

@@ -168,6 +168,10 @@ export const api = {
   wqSummary: () => http.get('/water-quality/summary').then((r) => r.data as WqSummary),
   wqAnalysers: () => http.get('/water-quality/analysers').then((r) => r.data as WqAnalyser[]),
   wqDetail: (id: string) => http.get(`/water-quality/analysers/${id}`).then((r) => r.data as WqDetail),
+
+  // Pump Stations
+  pumpStations: () => http.get('/pump-stations').then((r) => r.data as PumpStationSummary[]),
+  pumpStation: (id: string) => http.get(`/pump-stations/${id}`).then((r) => r.data as PumpStationDetail),
 };
 
 export interface GisImportRow { tag: string; name: string; type?: string; latitude: number; longitude: number }
@@ -194,4 +198,23 @@ export interface WqSummary {
 export interface WqDetail {
   id: string; tag: string; name: string; dmaName: string; transport: string | null; lastSeen: string | null;
   status: WqStatus; params: WqParam[]; trends: Record<string, { ts: string; value: number }[]>;
+}
+
+export interface Series { ts: string; value: number }
+export interface PumpStationSummary {
+  id: string; name: string; pumpCount: number; running: number; tripped: number;
+  storageM3: number | null; levelPct: number | null; pressureBar: number | null; netFlowKlh: number | null;
+}
+export type PumpState = 'RUN' | 'REST' | 'TRIP';
+export interface StationPump {
+  id: string; tag: string; name: string; state: PumpState; health: number | null;
+  dutyPct: number; runtimeH: number; powerKw: number | null; flowKlh: number | null;
+  timeline: { ts: string; on: boolean }[]; powerTrend: Series[];
+}
+export interface PumpStationDetail {
+  id: string; name: string;
+  kpis: { storageM3: number | null; levelPct: number | null; pressureBar: number | null; netFlowKlh: number | null;
+    running: number; resting: number; tripped: number; totalPowerKw: number };
+  pumps: StationPump[];
+  charts: { flow: Series[]; energy: Series[]; tank: Series[] };
 }

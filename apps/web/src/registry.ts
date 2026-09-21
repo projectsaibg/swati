@@ -16,7 +16,7 @@ export const NAV: NavItem[] = [
   { key: 'network_analysis', label: 'Network Analysis', path: '/network', group: 'Assets' },
   { key: 'action_center', label: 'Action Center', path: '/action-center', group: 'Operations' },
   { key: 'maintenance', label: 'Maintenance', path: '/maintenance', group: 'Operations' },
-  { key: 'leak_detection', label: 'ILK Hunter', path: '/ilk', group: 'Operations' },
+  { key: 'leak_detection', label: 'Leak Detection', path: '/ilk', group: 'Operations' },
   { key: 'field_verification', label: 'Field Verification', path: '/field', group: 'Operations' },
   { key: 'water_quality', label: 'Water Quality', path: '/water-quality', group: 'Water' },
   { key: 'nrw_explorer', label: 'NRW Explorer', path: '/nrw', group: 'Water' },

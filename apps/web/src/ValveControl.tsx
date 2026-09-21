@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { ValveDetail, ValveRow, api } from './api';
+import { GeoQuery, ValveDetail, ValveRow, api } from './api';
 import { useAuth } from './contexts';
 import { Icon } from './icons';
+import { GeoFilter } from './GeoFilter';
 
 const statusColor = (s: string) => (s === 'Open' ? 'var(--ok)' : s === 'Closed' ? 'var(--alarm)' : 'var(--watch)');
 const statusPill = (s: string) => (s === 'Open' ? 'ok' : s === 'Closed' ? 'alarm' : 'watch');
@@ -28,12 +29,13 @@ export function ValveControl() {
   const [detail, setDetail] = useState<ValveDetail | null>(null);
   const [setPos, setSetPos] = useState(50);
   const [busy, setBusy] = useState(false);
+  const [geo, setGeo] = useState<GeoQuery>({});
   const [err, setErr] = useState('');
 
   const canOperate = !!user?.permissions?.some((p) => p === 'valve.operate' || p === '*');
 
-  const load = () => api.valves().then(setRows).catch(() => setErr('Could not load valves.'));
-  useEffect(() => { load(); }, []);
+  const load = () => api.valves(geo).then(setRows).catch(() => setErr('Could not load valves.'));
+  useEffect(() => { load(); setSel(null); /* eslint-disable-next-line */ }, [geo]);
   useEffect(() => {
     if (!sel) { setDetail(null); return; }
     api.valve(sel).then((d) => { setDetail(d); setSetPos(Number(d.positionPct ?? 50)); }).catch(() => setErr('Could not load valve.'));
@@ -69,6 +71,12 @@ export function ValveControl() {
         <div className="kpi"><div className="val tnum" style={{ color: 'var(--alarm)' }}>{counts.Closed ?? 0}</div><div className="lbl">Closed</div></div>
         <div className="kpi"><div className="val tnum">{rows.filter((v) => v.controllable).length}</div><div className="lbl">Controllable</div></div>
       </section>
+
+      {/* Geo filter */}
+      <div className="panel" style={{ marginBottom: 12, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <GeoFilter value={geo} onChange={setGeo} />
+        <span className="muted">{rows.length} valve{rows.length === 1 ? '' : 's'} in scope</span>
+      </div>
 
       {/* Filter chips */}
       <div className="vchips">
@@ -106,6 +114,16 @@ export function ValveControl() {
               <span><Icon name="activity" size={13} /> {fmt(v.flowKlmin, 1)} <span className="muted">kL/min</span></span>
               <span className={`pill ${v.health === 'Good' ? 'ok' : 'watch'}`}>{v.health ?? 'n/a'}</span>
             </div>
+            {v.controllable ? (
+              canOperate && (
+                <div className="vc-ops" onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <button className="btn sm" style={{ flex: 1 }} disabled={busy || v.status === 'Open'} onClick={() => operate(v.id, 'OPEN')}>On</button>
+                  <button className="btn danger sm" style={{ flex: 1 }} disabled={busy || v.status === 'Closed'} onClick={() => operate(v.id, 'CLOSE')}>Off</button>
+                </div>
+              )
+            ) : (
+              <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>Manual valve — not remotely operable</div>
+            )}
           </div>
         ))}
       </section>

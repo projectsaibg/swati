@@ -191,7 +191,7 @@ export const api = {
   nrwSummary: () => http.get('/nrw/summary').then((r) => r.data as NrwSummary),
 
   // Valve Control
-  valves: () => http.get('/valves').then((r) => r.data as ValveRow[]),
+  valves: (f?: GeoQuery) => http.get('/valves', { params: f }).then((r) => r.data as ValveRow[]),
   valve: (id: string) => http.get(`/valves/${id}`).then((r) => r.data as ValveDetail),
   operateValve: (id: string, dto: { action: 'OPEN' | 'CLOSE' | 'SET'; positionPct?: number }) =>
     http.post(`/valves/${id}/operate`, dto).then((r) => r.data as ValveDetail),
@@ -242,6 +242,7 @@ export interface FieldVerificationRow {
 
 export interface ValveRow {
   id: string; tag: string; name: string; area: string | null; valveType: string | null;
+  district: string | null; block: string | null; zone: string | null;
   status: string; positionPct: number | null; controllable: boolean;
   upstreamBar: number | null; downstreamBar: number | null; flowKlmin: number | null; health: string | null;
   lastOperated: string | null; lastOperator: string | null;

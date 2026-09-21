@@ -481,6 +481,27 @@ async function main() {
         buf.push({ assetId: wqa.id, ts, metric, value, unit: WQ_UNITS[metric] ?? '', quality: 'good', source: 'demo' });
       }
     }
+
+    // Zone inlet valve for this pump house — geo-tagged so Valve Control shares
+    // the District -> Block -> Zone filter and offers on/off per valve. On
+    // reseed the operated status/position are preserved (update omits them).
+    const vsp = [['Open', 100], ['Throttled', 60], ['Closed', 0]] as const;
+    const vpick = vsp[seed % 3];
+    const vcommon = {
+      name: `${name} inlet`, area: `${ph.district} · ${ph.block}`,
+      district: ph.district, block: ph.block, zone,
+      valveType: seed % 2 ? 'Butterfly' : 'Gate',
+      controllable: seed % 7 !== 0,
+      upstreamBar: Math.round((5.2 + (seed % 12) / 10) * 100) / 100,
+      downstreamBar: Math.round((3.0 + (seed % 20) / 10) * 100) / 100,
+      flowKlmin: Math.round((6 + (seed % 18)) * 10) / 10,
+      health: seed % 13 === 0 ? 'Attention' : 'Good',
+    };
+    await prisma.valve.upsert({
+      where: { tag: `${ph.code}-VLV` },
+      update: vcommon,
+      create: { tag: `${ph.code}-VLV`, status: vpick[0], positionPct: vpick[1], ...vcommon },
+    });
     await flush();
   }
   await flush(true);
@@ -489,18 +510,10 @@ async function main() {
   }
   console.log(`Seeded ${PUMP_HOUSES.length} pump houses (${phFault} faulted pumps, ${phDegradedWq} degraded WQ sites).`);
 
-  // Demo valves (some remotely controllable) for the Valve Control module.
-  const valveDefs = [
-    { tag: 'VLV-01', name: 'Karimpur I trunk inlet', area: 'Nadia · Karimpur I', valveType: 'Gate', status: 'Open', positionPct: 100, controllable: true, upstreamBar: 5.8, downstreamBar: 5.4, flowKlmin: 12.6, health: 'Good' },
-    { tag: 'VLV-02', name: 'Chapra zone A', area: 'Nadia · Chapra', valveType: 'Butterfly', status: 'Throttled', positionPct: 60, controllable: true, upstreamBar: 5.6, downstreamBar: 3.9, flowKlmin: 7.4, health: 'Good' },
-    { tag: 'VLV-03', name: 'Tehatta I inlet', area: 'Nadia · Tehatta I', valveType: 'Gate', status: 'Open', positionPct: 100, controllable: true, upstreamBar: 5.2, downstreamBar: 5.0, flowKlmin: 10.1, health: 'Good' },
-    { tag: 'VLV-04', name: 'Hanskhali washout', area: 'Nadia · Hanskhali', valveType: 'Gate', status: 'Closed', positionPct: 0, controllable: false, upstreamBar: 5.1, downstreamBar: 0.2, flowKlmin: 0, health: 'Attention' },
-    { tag: 'VLV-05', name: 'Panskura trunk isolation', area: 'Purba Medinipur · Panskura', valveType: 'Butterfly', status: 'Open', positionPct: 100, controllable: true, upstreamBar: 6.4, downstreamBar: 6.1, flowKlmin: 24.3, health: 'Good' },
-    { tag: 'VLV-06', name: 'Tamluk reservoir outlet', area: 'Purba Medinipur · Tamluk', valveType: 'Gate', status: 'Throttled', positionPct: 45, controllable: true, upstreamBar: 4.9, downstreamBar: 2.8, flowKlmin: 5.7, health: 'Good' },
-  ];
-  for (const v of valveDefs) {
-    await prisma.valve.upsert({ where: { tag: v.tag }, update: v, create: v });
-  }
+  // Remove legacy free-text-area valves (pre-geolocation). Every valve is now a
+  // geo-tagged zone inlet valve created per pump house in the loop above; its
+  // ValveOp audit rows cascade-delete with it.
+  await prisma.valve.deleteMany({ where: { district: null } });
 
   // NRW records: per-area input vs billed across 6 months (improving trend).
   const nrwAreas = [

@@ -196,6 +196,11 @@ export const api = {
   operateValve: (id: string, dto: { action: 'OPEN' | 'CLOSE' | 'SET'; positionPct?: number }) =>
     http.post(`/valves/${id}/operate`, dto).then((r) => r.data as ValveDetail),
 
+  // Leak Detection
+  leakSummary: (f?: GeoQuery) => http.get('/leak/summary', { params: f }).then((r) => r.data as LeakSummary),
+  leakCandidates: (f?: GeoQuery) => http.get('/leak/candidates', { params: f }).then((r) => r.data as LeakCandidate[]),
+  flagLeak: (siteId: string) => http.post(`/leak/flag/${siteId}`).then((r) => r.data as { alertId: string; severity: string }),
+
   // Field Verification
   fieldVerifications: () => http.get('/field-verification').then((r) => r.data as FieldVerificationRow[]),
   createFieldVerification: (form: FormData) =>
@@ -252,6 +257,20 @@ export interface ValveOp {
   toStatus: string; operator: string; ts: string;
 }
 export interface ValveDetail extends Omit<ValveRow, 'lastOperator'> { ops: ValveOp[] }
+
+export interface LeakCandidate {
+  siteId: string; code: string | null; name: string;
+  district: string | null; block: string | null; zone: string | null;
+  scheme: string | null; latitude: number | string | null; longitude: number | string | null;
+  avgFlow: number; nightFlow: number; nightRatio: number;
+  leakScore: number; severity: 'High' | 'Medium' | 'Low';
+  estLossKld: number; likelyCause: string;
+}
+export interface LeakSummary {
+  totalCandidates: number; high: number; medium: number; low: number;
+  totalLossKld: number; avgNrwPct: number | null;
+  worst: { name: string; estLossKld: number; district: string | null; block: string | null; zone: string | null } | null;
+}
 
 export interface NrwSummary {
   period: string | null;

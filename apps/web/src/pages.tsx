@@ -90,11 +90,11 @@ export function Dashboard() {
   const alertAccent = !s ? 'amber' : s.alerts.critical + s.alerts.alarm > 0 ? 'red' : s.alerts.watch > 0 ? 'amber' : 'teal';
 
   const featured = NAV.filter((i) => i.key !== 'executive_overview' && isEnabled(i.key));
-  const TIER_BANDS: { name: string; match: string[] }[] = [
-    { name: 'Basic', match: ['BASE'] },
-    { name: 'Vector', match: ['VECTOR'] },
-    { name: 'Velocity', match: ['VELOCITY'] },
-    { name: 'Quantum', match: ['QUANTUM'] },
+  const TIER_BANDS: { name: string; match: string[]; accent: string; tagline: string }[] = [
+    { name: 'Basic', match: ['BASE'], accent: 'slate', tagline: 'Core operations' },
+    { name: 'Vector', match: ['VECTOR'], accent: 'cyan', tagline: 'Connected monitoring' },
+    { name: 'Velocity', match: ['VELOCITY'], accent: 'teal', tagline: 'Active control' },
+    { name: 'Quantum', match: ['QUANTUM'], accent: 'violet', tagline: 'Intelligence & prediction' },
   ];
 
   return (
@@ -147,9 +147,16 @@ export function Dashboard() {
         const items = featured.filter((i) => band.match.includes(tierOf(i.key) ?? ''));
         if (items.length === 0) return null;
         return (
-          <div key={band.name}>
-            <div className="sectlabel">{band.name} tier</div>
-            <section className="modgrid">
+          <section className={`tierband t-${band.accent}`} key={band.name}>
+            <div className="tierband-head">
+              <div className="tierband-title">
+                <span className="tierband-name">{band.name}</span>
+                <span className="tierband-tag">tier</span>
+                <span className="tierband-tagline">{band.tagline}</span>
+              </div>
+              <span className="tierband-count">{items.length} module{items.length === 1 ? '' : 's'}</span>
+            </div>
+            <div className="modgrid">
               {items.map((i) => {
                 const m = MODULE_META[i.key] ?? { icon: 'grid', desc: 'Module.', accent: 'cyan' as string };
                 return (
@@ -164,8 +171,8 @@ export function Dashboard() {
                   </Link>
                 );
               })}
-            </section>
-          </div>
+            </div>
+          </section>
         );
       })}
     </div>

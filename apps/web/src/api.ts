@@ -173,6 +173,9 @@ export const api = {
   pumpStations: () => http.get('/pump-stations').then((r) => r.data as PumpStationSummary[]),
   pumpStation: (id: string) => http.get(`/pump-stations/${id}`).then((r) => r.data as PumpStationDetail),
 
+  // NRW Explorer
+  nrwSummary: () => http.get('/nrw/summary').then((r) => r.data as NrwSummary),
+
   // Valve Control
   valves: () => http.get('/valves').then((r) => r.data as ValveRow[]),
   valve: (id: string) => http.get(`/valves/${id}`).then((r) => r.data as ValveDetail),
@@ -234,6 +237,14 @@ export interface ValveOp {
   toStatus: string; operator: string; ts: string;
 }
 export interface ValveDetail extends Omit<ValveRow, 'lastOperator'> { ops: ValveOp[] }
+
+export interface NrwSummary {
+  period: string | null;
+  totalInputKl: number; totalBilledKl: number; nrwKl: number; nrwPct: number;
+  physicalKl: number; commercialKl: number; physicalPct: number; commercialPct: number;
+  dmas: { area: string; inputKl: number; billedKl: number; nrwKl: number; nrwPct: number }[];
+  trend: { period: string; nrwPct: number }[];
+}
 
 export interface Series { ts: string; value: number }
 export interface PumpStationSummary {

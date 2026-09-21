@@ -29,7 +29,7 @@ export const FEATURE_REGISTRY: FeatureDef[] = [
   { key: 'reports', module: 'Reports', tier: 'BASE', visibility: 'LOGIN' },
   { key: 'key_personnel', module: 'Key Personnel', tier: 'BASE', visibility: 'LOGIN' },
   { key: 'water_quality', module: 'Water Quality', tier: 'VECTOR', visibility: 'PUBLIC' },
-  { key: 'nrw_explorer', module: 'NRW Explorer', tier: 'VECTOR', visibility: 'LOGIN' },
+  { key: 'nrw_explorer', module: 'NRW Explorer', tier: 'VECTOR', visibility: 'PUBLIC' },
   { key: 'valve_control', module: 'Valve Control', tier: 'VECTOR', visibility: 'PUBLIC' },
   { key: 'leak_detection', module: 'ILK Hunter', tier: 'VELOCITY', visibility: 'LOGIN' },
   { key: 'billing', module: 'Billing & Revenue', tier: 'VELOCITY', visibility: 'LOGIN' },

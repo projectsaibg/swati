@@ -53,6 +53,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .login-card .sub { color: var(--muted); margin: 0 0 18px; }
 .field { display: block; margin-bottom: 12px; font-size: 13px; color: var(--muted); }
 .field input, .field select { display: block; width: 100%; margin-top: 4px; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface2); color: var(--ink); }
+.input { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface2); color: var(--ink); font: inherit; }
+.input:focus { outline: none; border-color: #2f81f7; }
 .err { color: var(--alarm); font-size: 13px; margin-bottom: 10px; }
 
 /* Admin switchboard */

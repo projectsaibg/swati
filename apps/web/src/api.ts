@@ -43,11 +43,20 @@ export interface AlertRow {
   metric: string | null; valueNum: number | null; status: string; createdAt: string;
   assetTag: string | null; assetName: string | null;
 }
-export interface MapPoint {
+export interface MapAsset {
   id: string; tag: string; name: string; type: string;
   latitude: number; longitude: number; status: string;
   health: number | null; transport: string | null;
+  siteCode: string | null; district: string | null; block: string | null; zone: string | null;
 }
+export interface MapSite {
+  id: string; code: string | null; name: string;
+  district: string | null; block: string | null; zone: string | null;
+  scheme: string | null; phType: string | null;
+  latitude: number; longitude: number;
+  assetCount: number; pumpCount: number; fault: number;
+}
+export interface MapData { sites: MapSite[]; assets: MapAsset[] }
 
 export interface EsaResult {
   supplyIndex: number | null; statorIndex: number | null; rotorIndex: number | null;
@@ -154,7 +163,7 @@ export const api = {
   dashboardSummary: () => http.get('/dashboard/summary').then((r) => r.data as DashboardSummary),
   alerts: (status = 'OPEN') => http.get('/alerts', { params: { status } }).then((r) => r.data as AlertRow[]),
   ackAlert: (id: string) => http.post(`/alerts/${id}/ack`).then((r) => r.data as AlertRow[]),
-  mapPoints: () => http.get('/map/points').then((r) => r.data as MapPoint[]),
+  mapPoints: () => http.get('/map/points').then((r) => r.data as MapData),
 
   // Pump & Motor ESA
   conditionAssets: () => http.get('/condition/assets').then((r) => r.data as ConditionAsset[]),

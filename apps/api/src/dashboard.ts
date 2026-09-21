@@ -101,24 +101,60 @@ export class DashboardService {
   }
 
   async mapPoints() {
-    const assets = await this.prisma.asset.findMany({
-      where: { latitude: { not: null }, longitude: { not: null } },
-      include: {
-        readings: { orderBy: { ts: 'desc' }, take: 1, select: { healthScore: true } },
-        connectivity: { select: { transport: true, lastSeen: true } },
-      },
-    });
-    return assets.map((a) => ({
-      id: a.id,
-      tag: a.tag,
-      name: a.name,
-      type: a.type,
-      latitude: a.latitude,
-      longitude: a.longitude,
-      status: a.status,
-      health: a.readings[0]?.healthScore ?? null,
-      transport: a.connectivity?.transport ?? null,
-    }));
+    const [assets, sites] = await Promise.all([
+      this.prisma.asset.findMany({
+        where: { latitude: { not: null }, longitude: { not: null } },
+        include: {
+          readings: { orderBy: { ts: 'desc' }, take: 1, select: { healthScore: true } },
+          connectivity: { select: { transport: true, lastSeen: true } },
+          site: { select: { code: true, district: true, block: true, zone: true } },
+        },
+      }),
+      this.prisma.site.findMany({
+        where: { kind: 'PUMP_STATION', latitude: { not: null }, longitude: { not: null } },
+        include: { assets: { select: { type: true, status: true } } },
+      }),
+    ]);
+    const PUMP = ['MOTOR_PUMP', 'PUMP', 'MOTOR'];
+    return {
+      // Pump-house sites carry the administrative geography and a small rollup —
+      // these are the primary markers; the map filters on district/block/zone.
+      sites: sites.map((s) => {
+        const pumps = s.assets.filter((a) => PUMP.includes(a.type));
+        return {
+          id: s.id,
+          code: s.code,
+          name: s.name,
+          district: s.district,
+          block: s.block,
+          zone: s.zone,
+          scheme: s.scheme,
+          phType: s.phType,
+          latitude: s.latitude,
+          longitude: s.longitude,
+          assetCount: s.assets.length,
+          pumpCount: pumps.length,
+          fault: pumps.filter((p) => p.status === 'FAULT').length,
+        };
+      }),
+      // Individual assets (adjacent to their pump house) — shown on the "assets"
+      // layer toggle; each carries its parent site's geography for filtering.
+      assets: assets.map((a) => ({
+        id: a.id,
+        tag: a.tag,
+        name: a.name,
+        type: a.type,
+        latitude: a.latitude,
+        longitude: a.longitude,
+        status: a.status,
+        health: a.readings[0]?.healthScore ?? null,
+        transport: a.connectivity?.transport ?? null,
+        siteCode: a.site?.code ?? null,
+        district: a.site?.district ?? null,
+        block: a.site?.block ?? null,
+        zone: a.site?.zone ?? null,
+      })),
+    };
   }
 }
 

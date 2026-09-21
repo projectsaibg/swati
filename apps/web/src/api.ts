@@ -226,6 +226,7 @@ export interface FieldVerificationRow {
 export interface ValveRow {
   id: string; tag: string; name: string; area: string | null; valveType: string | null;
   status: string; positionPct: number | null; controllable: boolean;
+  upstreamBar: number | null; downstreamBar: number | null; flowKlmin: number | null; health: string | null;
   lastOperated: string | null; lastOperator: string | null;
 }
 export interface ValveOp {

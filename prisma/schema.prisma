@@ -169,8 +169,19 @@ model Site {
   kind      SiteKind @default(OTHER)
   latitude  Decimal? @db.Decimal(10, 7)
   longitude Decimal? @db.Decimal(10, 7)
+  // Administrative geography (West Bengal pump-house master). Nullable so
+  // non-pump-house sites (DMAs, other) can leave them blank.
+  code      String?  @unique // stable pump-house id, e.g. PH001
+  district  String?
+  block     String?
+  zone      String?
+  scheme    String? // Water Supply Scheme this pump house belongs to
+  phType    String? // pump house type: Intermediate | Basic
   createdAt DateTime @default(now())
   assets    Asset[]
+
+  @@index([district, block])
+  @@index([kind])
 }
 
 model Asset {

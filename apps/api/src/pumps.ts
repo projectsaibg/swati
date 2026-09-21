@@ -27,7 +27,7 @@ export class PumpStationsService {
     if (assetIds.length === 0) return new Map<string, number>();
     const rows = await this.prisma.measurement.findMany({
       where: { assetId: { in: assetIds }, metric: { in: metrics } },
-      orderBy: { ts: 'desc' }, take: 6000,
+      orderBy: { ts: 'desc' }, take: 12000,
     });
     const map = new Map<string, number>();
     for (const r of rows) {
@@ -51,13 +51,18 @@ export class PumpStationsService {
       orderBy: { name: 'asc' },
       include: { assets: { select: { id: true, type: true, status: true } } },
     });
-    const out: any[] = [];
+    // Batch the latest-value lookup across every station's devices in one
+    // query — avoids an N+1 that would fire one query per pump house at scale.
+    const allDevIds: string[] = [];
     for (const s of stations) {
+      const dev = this.stationDevices(s.assets);
+      for (const id of [dev.tank, dev.pressure, dev.flow]) if (id) allDevIds.push(id);
+    }
+    const lm = await this.latest(allDevIds, ['storage_m3', 'level_pct', 'pressure_bar', 'net_flow_klh']);
+    return stations.map((s) => {
       const pumps = s.assets.filter((a) => PUMP_TYPES.includes(a.type));
       const dev = this.stationDevices(s.assets);
-      const devIds = [dev.tank, dev.pressure, dev.flow].filter(Boolean) as string[];
-      const lm = await this.latest(devIds, ['storage_m3', 'level_pct', 'pressure_bar', 'net_flow_klh']);
-      out.push({
+      return {
         id: s.id, name: s.name,
         pumpCount: pumps.length,
         running: pumps.filter((p) => p.status === 'RUNNING').length,
@@ -66,9 +71,8 @@ export class PumpStationsService {
         levelPct: dev.tank ? lm.get(`${dev.tank}|level_pct`) ?? null : null,
         pressureBar: dev.pressure ? lm.get(`${dev.pressure}|pressure_bar`) ?? null : null,
         netFlowKlh: dev.flow ? lm.get(`${dev.flow}|net_flow_klh`) ?? null : null,
-      });
-    }
-    return out;
+      };
+    });
   }
 
   async detail(id: string) {

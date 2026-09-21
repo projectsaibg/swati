@@ -1,14 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import * as XLSX from 'xlsx';
-import { GisImportRow, MapPoint, api } from './api';
+import { GisImportRow, MapAsset, MapData, MapSite, api } from './api';
 import { useAuth } from './contexts';
 
 const STATUS_COLOR: Record<string, string> = {
   RUNNING: '#2ea36b', FAULT: '#e0533d', STOPPED: '#d0a215',
 };
-function colorFor(status: string) { return STATUS_COLOR[status] ?? '#2f81f7'; }
+function assetColor(status: string) { return STATUS_COLOR[status] ?? '#2f81f7'; }
+function siteColor(s: MapSite) {
+  if (s.fault > 0) return '#e0533d';                       // any faulted pump
+  return s.phType === 'Intermediate' ? '#2f81f7' : '#22b8a6'; // Intermediate vs Basic
+}
+const ALL = '';
 
 // --- file parsing (xls/csv via SheetJS, kml via DOMParser) -----------------
 function pick(row: Record<string, any>, keys: string[]): any {
@@ -56,53 +61,125 @@ async function parseFile(file: File): Promise<GisImportRow[]> {
   return rowsFromSheet(XLSX.utils.sheet_to_json(sheet, { defval: '' }));
 }
 
+function uniqSorted(vals: (string | null)[]): string[] {
+  return Array.from(new Set(vals.filter((v): v is string => !!v))).sort();
+}
+
 export function MapPage() {
   const { user } = useAuth();
-  const [points, setPoints] = useState<MapPoint[]>([]);
+  const [data, setData] = useState<MapData>({ sites: [], assets: [] });
   const [err, setErr] = useState('');
   const [preview, setPreview] = useState<GisImportRow[] | null>(null);
   const [importMsg, setImportMsg] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // Filters
+  const [district, setDistrict] = useState(ALL);
+  const [block, setBlock] = useState(ALL);
+  const [zone, setZone] = useState(ALL);
+  const [search, setSearch] = useState('');
+  const [showAssets, setShowAssets] = useState(false);
+
   const elRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const layerRef = useRef<L.LayerGroup | null>(null);
+  const siteLayerRef = useRef<L.LayerGroup | null>(null);
+  const assetLayerRef = useRef<L.LayerGroup | null>(null);
+  const didFit = useRef(false);
 
   const canImport = !!user?.permissions?.some((p) => p === 'gis.import' || p === '*');
 
-  const load = () => api.mapPoints().then(setPoints).catch(() => setErr('Could not load map points.'));
+  const load = () => api.mapPoints().then(setData).catch(() => setErr('Could not load map data.'));
   useEffect(() => { load(); }, []);
 
-  // Init Leaflet once.
+  // Cascading filter option lists.
+  const districts = useMemo(() => uniqSorted(data.sites.map((s) => s.district)), [data.sites]);
+  const blocks = useMemo(
+    () => uniqSorted(data.sites.filter((s) => !district || s.district === district).map((s) => s.block)),
+    [data.sites, district],
+  );
+  const zones = useMemo(
+    () => uniqSorted(
+      data.sites
+        .filter((s) => (!district || s.district === district) && (!block || s.block === block))
+        .map((s) => s.zone),
+    ),
+    [data.sites, district, block],
+  );
+
+  const matches = (d: string | null, b: string | null, z: string | null) =>
+    (!district || d === district) && (!block || b === block) && (!zone || z === zone);
+
+  const filteredSites = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return data.sites.filter((s) =>
+      matches(s.district, s.block, s.zone) &&
+      (!q || `${s.name} ${s.scheme ?? ''} ${s.code ?? ''}`.toLowerCase().includes(q)),
+    );
+  }, [data.sites, district, block, zone, search]);
+
+  const filteredAssets = useMemo(
+    () => data.assets.filter((a) => matches(a.district, a.block, a.zone)),
+    [data.assets, district, block, zone],
+  );
+
+  // Init Leaflet once, centred on West Bengal.
   useEffect(() => {
     if (mapRef.current || !elRef.current) return;
-    const map = L.map(elRef.current, { center: [15.2, 74.11], zoom: 12, scrollWheelZoom: true });
+    const map = L.map(elRef.current, { center: [23.5, 88.6], zoom: 9, scrollWheelZoom: true });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19, attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
-    layerRef.current = L.layerGroup().addTo(map);
+    siteLayerRef.current = L.layerGroup().addTo(map);
+    assetLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     setTimeout(() => map.invalidateSize(), 100);
     return () => { map.remove(); mapRef.current = null; };
   }, []);
 
-  // Re-render markers when points change.
+  // Re-render markers when the filtered sets change.
   useEffect(() => {
-    const map = mapRef.current, layer = layerRef.current;
-    if (!map || !layer) return;
-    layer.clearLayers();
+    const map = mapRef.current, siteLayer = siteLayerRef.current, assetLayer = assetLayerRef.current;
+    if (!map || !siteLayer || !assetLayer) return;
+    siteLayer.clearLayers();
+    assetLayer.clearLayers();
     const latlngs: [number, number][] = [];
-    for (const p of points) {
-      const lat = Number(p.latitude), lng = Number(p.longitude);
+
+    for (const s of filteredSites) {
+      const lat = Number(s.latitude), lng = Number(s.longitude);
       latlngs.push([lat, lng]);
       L.circleMarker([lat, lng], {
-        radius: 8, color: '#fff', weight: 1.5, fillColor: colorFor(p.status), fillOpacity: 0.9,
+        radius: 7, color: '#fff', weight: 1.5, fillColor: siteColor(s), fillOpacity: 0.9,
       })
-        .bindPopup(`<strong>${p.tag}</strong> · ${p.name}<br>${p.type}${p.transport ? ` · ${p.transport}` : ''}${p.health != null ? ` · health ${p.health}` : ''}`)
-        .addTo(layer);
+        .bindPopup(
+          `<strong>${s.name}</strong><br>` +
+          `${s.phType ?? '—'} pump house<br>` +
+          `${[s.district, s.block, s.zone].filter(Boolean).join(' · ')}<br>` +
+          `${s.pumpCount} pump(s)${s.fault ? ` · <b style="color:#e0533d">${s.fault} fault</b>` : ''} · ${s.assetCount} assets<br>` +
+          `<span style="opacity:.6">${lat.toFixed(5)}, ${lng.toFixed(5)}</span>`,
+        )
+        .addTo(siteLayer);
     }
-    if (latlngs.length) map.fitBounds(L.latLngBounds(latlngs).pad(0.2));
-  }, [points]);
+
+    if (showAssets) {
+      for (const a of filteredAssets) {
+        const lat = Number(a.latitude), lng = Number(a.longitude);
+        L.circleMarker([lat, lng], {
+          radius: 3.5, color: assetColor(a.status), weight: 1, fillColor: assetColor(a.status), fillOpacity: 0.85,
+        })
+          .bindPopup(
+            `<strong>${a.tag}</strong> · ${a.name}<br>${a.type}` +
+            `${a.transport ? ` · ${a.transport}` : ''}${a.health != null ? ` · health ${a.health}` : ''}`,
+          )
+          .addTo(assetLayer);
+      }
+    }
+
+    // Fit once on first data, and whenever a filter narrows the set.
+    if (latlngs.length && (!didFit.current || district || block || zone || search)) {
+      map.fitBounds(L.latLngBounds(latlngs).pad(0.2));
+      didFit.current = true;
+    }
+  }, [filteredSites, filteredAssets, showAssets, district, block, zone, search]);
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setErr(''); setImportMsg('');
@@ -134,23 +211,53 @@ export function MapPage() {
     }
   };
 
-  const counts = points.reduce((a, p) => { a[p.status] = (a[p.status] ?? 0) + 1; return a; }, {} as Record<string, number>);
+  const resetFilters = () => { setDistrict(ALL); setBlock(ALL); setZone(ALL); setSearch(''); };
+  const intermediate = filteredSites.filter((s) => s.phType === 'Intermediate').length;
+  const basic = filteredSites.filter((s) => s.phType === 'Basic').length;
+  const faults = filteredSites.reduce((n, s) => n + (s.fault > 0 ? 1 : 0), 0);
 
   return (
     <div>
       <div className="exec-head">
         <div>
           <h1 className="exec-title" style={{ fontSize: 26 }}>INTERACTIVE MAP</h1>
-          <p className="exec-sub">{points.length} located assets & devices</p>
+          <p className="exec-sub">
+            {filteredSites.length} of {data.sites.length} pump houses
+            {showAssets ? ` · ${filteredAssets.length} assets shown` : ` · ${data.assets.length} assets (toggle to show)`}
+          </p>
         </div>
         <div className="statuspills">
-          <span className="pill ok">{counts.RUNNING ?? 0} running</span>
-          <span className="pill alarm">{counts.FAULT ?? 0} fault</span>
-          <span className="pill watch">{counts.STOPPED ?? 0} stopped</span>
+          <span className="pill ok">{intermediate} intermediate</span>
+          <span className="pill watch">{basic} basic</span>
+          <span className="pill alarm">{faults} with fault</span>
         </div>
       </div>
 
       {err && <div className="err">{err}</div>}
+
+      {/* Filter bar */}
+      <div className="panel" style={{ marginBottom: 12, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+        <select className="input" value={district} onChange={(e) => { setDistrict(e.target.value); setBlock(ALL); setZone(ALL); }}>
+          <option value={ALL}>All districts</option>
+          {districts.map((d) => <option key={d} value={d}>{d}</option>)}
+        </select>
+        <select className="input" value={block} onChange={(e) => { setBlock(e.target.value); setZone(ALL); }}>
+          <option value={ALL}>All blocks</option>
+          {blocks.map((b) => <option key={b} value={b}>{b}</option>)}
+        </select>
+        <select className="input" value={zone} onChange={(e) => setZone(e.target.value)}>
+          <option value={ALL}>All zones</option>
+          {zones.map((z) => <option key={z} value={z}>{z}</option>)}
+        </select>
+        <input className="input" placeholder="Search scheme / code…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ minWidth: 180 }} />
+        <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
+          <input type="checkbox" checked={showAssets} onChange={(e) => setShowAssets(e.target.checked)} />
+          Show adjacent assets
+        </label>
+        {(district || block || zone || search) && (
+          <button className="btn ghost sm" onClick={resetFilters}>Clear</button>
+        )}
+      </div>
 
       <div ref={elRef} className="leafmap" />
 
@@ -183,22 +290,25 @@ export function MapPage() {
 
       <div className="panel" style={{ marginTop: 16 }}>
         <table className="tbl">
-          <thead><tr><th>Tag</th><th>Name</th><th>Type</th><th>Status</th><th>Transport</th><th>Health</th><th>Lat</th><th>Lng</th></tr></thead>
+          <thead><tr><th>Code</th><th>Scheme</th><th>Pump House</th><th>Type</th><th>District</th><th>Block</th><th>Zone</th><th>Pumps</th><th>Lat</th><th>Lng</th></tr></thead>
           <tbody>
-            {points.map((p) => (
-              <tr key={p.id}>
-                <td>{p.tag}</td>
-                <td>{p.name}</td>
-                <td className="muted">{p.type}</td>
-                <td><span className={`pill ${p.status === 'RUNNING' ? 'ok' : p.status === 'FAULT' ? 'alarm' : 'watch'}`}>{p.status}</span></td>
-                <td className="muted">{p.transport ?? '—'}</td>
-                <td className="tnum">{p.health ?? '—'}</td>
-                <td className="tnum muted">{Number(p.latitude).toFixed(4)}</td>
-                <td className="tnum muted">{Number(p.longitude).toFixed(4)}</td>
+            {filteredSites.slice(0, 200).map((s) => (
+              <tr key={s.id}>
+                <td className="muted">{s.code}</td>
+                <td>{s.scheme}</td>
+                <td>{s.name.split(' — ')[1] ?? ''}</td>
+                <td><span className={`pill ${s.phType === 'Intermediate' ? 'ok' : 'watch'}`}>{s.phType ?? '—'}</span></td>
+                <td className="muted">{s.district}</td>
+                <td className="muted">{s.block}</td>
+                <td className="muted">{s.zone ?? '—'}</td>
+                <td className="tnum">{s.pumpCount}{s.fault ? ` (${s.fault}!)` : ''}</td>
+                <td className="tnum muted">{Number(s.latitude).toFixed(4)}</td>
+                <td className="tnum muted">{Number(s.longitude).toFixed(4)}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        {filteredSites.length > 200 && <p className="muted">Showing first 200 of {filteredSites.length}. Narrow the filters to see more.</p>}
       </div>
     </div>
   );

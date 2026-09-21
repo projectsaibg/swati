@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ConditionAsset, ConditionDetail, EsaResult, api } from './api';
+import { ConditionAsset, ConditionDetail, EsaResult, GeoQuery, api } from './api';
 import { AxisChart } from './charts';
+import { GeoFilter } from './GeoFilter';
 
 function healthColor(h: number | null): string {
   if (h == null) return 'var(--muted)';
@@ -33,18 +34,26 @@ export function ConditionMonitoring() {
   const [assets, setAssets] = useState<ConditionAsset[]>([]);
   const [sel, setSel] = useState<string | null>(null);
   const [detail, setDetail] = useState<ConditionDetail | null>(null);
+  const [geo, setGeo] = useState<GeoQuery>({});
   const [err, setErr] = useState('');
 
   useEffect(() => {
-    api.conditionAssets().then((a) => {
+    const load = () => api.conditionAssets(geo).then((a) => {
       setAssets(a);
-      if (a.length) setSel(a[0].id);
+      // Keep the current asset if still in scope, else jump to the first.
+      setSel((cur) => (cur && a.some((x) => x.id === cur)) ? cur : (a[0]?.id ?? null));
     }).catch(() => setErr('Could not load condition data.'));
-  }, []);
+    load();
+    const t = setInterval(load, 45000); // live refresh
+    return () => clearInterval(t);
+  }, [geo]);
 
   useEffect(() => {
-    if (!sel) return;
-    api.conditionDetail(sel).then(setDetail).catch(() => setErr('Could not load asset detail.'));
+    if (!sel) { setDetail(null); return; }
+    const load = () => api.conditionDetail(sel).then(setDetail).catch(() => setErr('Could not load asset detail.'));
+    load();
+    const t = setInterval(load, 45000); // live refresh
+    return () => clearInterval(t);
   }, [sel]);
 
   const gaugeStyle = useMemo(() => {
@@ -62,6 +71,11 @@ export function ConditionMonitoring() {
           <p className="exec-sub">Electrical Signature Analysis · {assets.length} machines monitored</p>
         </div>
         <div className="statuspills"><span className="spill live"><span className="livedot" /> ESA ENGINE</span></div>
+      </div>
+
+      <div className="panel" style={{ marginBottom: 12, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <GeoFilter value={geo} onChange={setGeo} />
+        <span className="muted">{assets.length} machine{assets.length === 1 ? '' : 's'} in scope</span>
       </div>
 
       {err && <div className="err">{err}</div>}

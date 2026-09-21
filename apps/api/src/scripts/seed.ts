@@ -310,8 +310,11 @@ async function main() {
   // Any asset outside the WB bounding box is a leftover placeholder (the real
   // motors/devices above were already relocated into WB). Clear child rows
   // first to satisfy foreign keys, then drop the old code-less sites.
+  // Outside the WB box, or missing coordinates entirely (old placeholder pumps
+  // whose parent site was deleted, leaving siteId null). Every real asset here
+  // has WB coordinates, so a null/out-of-box coordinate marks a leftover.
   const stale = await prisma.asset.findMany({
-    where: { OR: [{ latitude: { lt: 21 } }, { latitude: { gt: 28 } }, { longitude: { lt: 85 } }, { longitude: { gt: 91 } }] },
+    where: { OR: [{ latitude: null }, { longitude: null }, { latitude: { lt: 21 } }, { latitude: { gt: 28 } }, { longitude: { lt: 85 } }, { longitude: { gt: 91 } }] },
     select: { id: true },
   });
   const staleIds = stale.map((a) => a.id);
@@ -332,6 +335,17 @@ async function main() {
       await prisma.measurement.createMany({ data: buf.splice(0, buf.length) });
     }
   };
+  // Buffered ESA condition readings for the pumps (Pump & Motor screen).
+  const readingsBuf: any[] = [];
+
+  // Deterministic electrical signature per pump: healthy vs degraded, varied
+  // per site, so the ESA engine yields a real, non-degenerate health score.
+  const pumpEsaBase = (s: number, bad: boolean) => {
+    const j = (s % 10) / 10; // 0..0.9 jitter seed
+    return bad
+      ? { voltageV: 400, currentA: 168 + j * 4, powerFactor: 0.82, voltageUnbalancePct: 4.4, currentUnbalancePct: 11 + j, thdVoltagePct: 6.2, thdCurrentPct: 12, loadPct: 110, efficiencyPct: 75, speedRpm: 1456, vibrationMmS: 6.6, windingTempC: 83, bearingTempC: 88 }
+      : { voltageV: 413, currentA: 116 + j * 6, powerFactor: 0.9, voltageUnbalancePct: 0.9 + j * 0.5, currentUnbalancePct: 2.2 + j, thdVoltagePct: 2.4, thdCurrentPct: 3.6 + j, loadPct: 80 + (s % 10), efficiencyPct: 91, speedRpm: 1478, vibrationMmS: 2.1 + j, windingTempC: 58 + (s % 8), bearingTempC: 52 + (s % 8) };
+  };
 
   let phFault = 0;
   let phDegradedWq = 0;
@@ -339,11 +353,15 @@ async function main() {
     const seed = hash(ph.code);
     const intermediate = ph.phType === 'Intermediate';
     const name = `${ph.scheme} — ${ph.pumpHouse}`;
+    // Showcase fill: the master sheet leaves ~67% of pump houses without a zone.
+    // Synthesise a deterministic Zone I/II/III per scheme for those so the
+    // District -> Block -> Zone filter is useful everywhere; keep real zones.
+    const zone = ph.zone ?? `Zone ${['I', 'II', 'III'][hash(ph.scheme) % 3]}`;
 
     const site = await prisma.site.upsert({
       where: { code: ph.code },
-      update: { name, kind: 'PUMP_STATION', latitude: ph.lat, longitude: ph.lng, district: ph.district, block: ph.block, zone: ph.zone, scheme: ph.scheme, phType: ph.phType },
-      create: { code: ph.code, name, kind: 'PUMP_STATION', latitude: ph.lat, longitude: ph.lng, district: ph.district, block: ph.block, zone: ph.zone, scheme: ph.scheme, phType: ph.phType },
+      update: { name, kind: 'PUMP_STATION', latitude: ph.lat, longitude: ph.lng, district: ph.district, block: ph.block, zone, scheme: ph.scheme, phType: ph.phType },
+      create: { code: ph.code, name, kind: 'PUMP_STATION', latitude: ph.lat, longitude: ph.lng, district: ph.district, block: ph.block, zone, scheme: ph.scheme, phType: ph.phType },
     });
 
     // Pump (one per pump house; larger for intermediate stations).
@@ -355,7 +373,39 @@ async function main() {
       update: { siteId: site.id, type: 'MOTOR_PUMP', status: faulted ? 'FAULT' : 'RUNNING', ratedPowerKw: kw, ...at(ph.lat, ph.lng, OFF.pump) },
       create: { tag: `${ph.code}-P1`, name: `${name} pump`, type: 'MOTOR_PUMP', siteId: site.id, status: faulted ? 'FAULT' : 'RUNNING', ratedPowerKw: kw, ratedVoltageV: 415, ratedCurrentA: kw * 1.8, ratedSpeedRpm: 1480, ...at(ph.lat, ph.lng, OFF.pump) },
     });
-    await prisma.reading.create({ data: { assetId: pump.id, ts: new Date(now), healthScore: faulted ? 44 : 86 + (seed % 12), source: 'ps-demo' } });
+    // Full electrical readings so the ESA engine produces real sub-indices and
+    // health for the Pump & Motor screen (a short trend; simulator extends live).
+    const pb = pumpEsaBase(seed, faulted);
+    const PUMP_ESA_STEPS = 6;
+    for (let step = 0; step < PUMP_ESA_STEPS; step++) {
+      const age = (PUMP_ESA_STEPS - 1 - step) / (PUMP_ESA_STEPS - 1);
+      const drift = 1 - age * 0.1;
+      const input = {
+        voltageV: pb.voltageV, ratedVoltageV: 415,
+        currentA: pb.currentA, ratedCurrentA: kw * 1.8,
+        powerFactor: pb.powerFactor,
+        voltageUnbalancePct: pb.voltageUnbalancePct * drift,
+        currentUnbalancePct: pb.currentUnbalancePct * drift,
+        thdVoltagePct: pb.thdVoltagePct * drift,
+        thdCurrentPct: pb.thdCurrentPct * drift,
+        loadPct: pb.loadPct, efficiencyPct: pb.efficiencyPct,
+        speedRpm: pb.speedRpm, ratedSpeedRpm: 1480,
+        vibrationMmS: pb.vibrationMmS * drift,
+        windingTempC: pb.windingTempC, bearingTempC: pb.bearingTempC * drift,
+      };
+      const esa = computeEsa(input);
+      readingsBuf.push({
+        assetId: pump.id, ts: new Date(now - (PUMP_ESA_STEPS - 1 - step) * 30 * 60 * 1000),
+        voltageV: input.voltageV, currentA: input.currentA, powerFactor: input.powerFactor,
+        voltageUnbalancePct: input.voltageUnbalancePct, currentUnbalancePct: input.currentUnbalancePct,
+        thdVoltagePct: input.thdVoltagePct, thdCurrentPct: input.thdCurrentPct,
+        loadPct: input.loadPct, efficiencyPct: input.efficiencyPct, speedRpm: input.speedRpm,
+        vibrationMmS: input.vibrationMmS, windingTempC: input.windingTempC, bearingTempC: input.bearingTempC,
+        statorIndex: esa.statorIndex, rotorIndex: esa.rotorIndex, bearingIndex: esa.bearingIndex,
+        eccentricityIndex: esa.eccentricityIndex, supplyIndex: esa.supplyIndex, loadIndex: esa.loadIndex,
+        healthScore: esa.healthScore, source: 'ps-demo',
+      });
+    }
     await prisma.alert.deleteMany({ where: { assetId: pump.id, metric: 'healthScore' } });
     if (faulted) {
       await prisma.alert.create({ data: { assetId: pump.id, category: 'Condition', severity: 'ALARM', message: `${ph.code}: pump health degraded`, metric: 'healthScore', valueNum: 44, status: 'OPEN' } });
@@ -434,6 +484,9 @@ async function main() {
     await flush();
   }
   await flush(true);
+  for (let i = 0; i < readingsBuf.length; i += 5000) {
+    await prisma.reading.createMany({ data: readingsBuf.slice(i, i + 5000) });
+  }
   console.log(`Seeded ${PUMP_HOUSES.length} pump houses (${phFault} faulted pumps, ${phDegradedWq} degraded WQ sites).`);
 
   // Demo valves (some remotely controllable) for the Valve Control module.

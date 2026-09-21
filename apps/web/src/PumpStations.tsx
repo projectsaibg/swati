@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { PumpStationDetail, PumpStationSummary, Series, StationPump, api } from './api';
+import { GeoQuery, PumpStationDetail, PumpStationSummary, Series, StationPump, api } from './api';
 import { AxisChart } from './charts';
+import { GeoFilter } from './GeoFilter';
 
 const statePill = (s: string) => (s === 'RUN' ? 'ok' : s === 'TRIP' ? 'alarm' : 'watch');
 const fmt = (v: number | null, dp = 1) => (v == null ? '—' : Number(v).toFixed(dp));
@@ -27,17 +28,19 @@ export function PumpStations() {
   const [sid, setSid] = useState<string | null>(null);
   const [d, setD] = useState<PumpStationDetail | null>(null);
   const [pumpId, setPumpId] = useState<string | null>(null);
+  const [geo, setGeo] = useState<GeoQuery>({});
   const [err, setErr] = useState('');
 
   useEffect(() => {
-    const load = () => api.pumpStations().then((s) => {
+    const load = () => api.pumpStations(geo).then((s) => {
       setStations(s);
-      setSid((cur) => cur ?? (s[0]?.id ?? null));
+      // Keep the current station if still in scope, else jump to the first.
+      setSid((cur) => (cur && s.some((x) => x.id === cur)) ? cur : (s[0]?.id ?? null));
     }).catch(() => setErr('Could not load pump stations.'));
     load();
     const t = setInterval(load, 45000);
     return () => clearInterval(t);
-  }, []);
+  }, [geo]);
 
   useEffect(() => {
     if (!sid) { setD(null); return; }
@@ -63,6 +66,11 @@ export function PumpStations() {
       </div>
 
       {err && <div className="err">{err}</div>}
+
+      <div className="panel" style={{ marginBottom: 12, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <GeoFilter value={geo} onChange={setGeo} />
+        <span className="muted">{stations.length} station{stations.length === 1 ? '' : 's'} in scope</span>
+      </div>
 
       <div className="station-bar">
         <label className="field" style={{ marginBottom: 0 }}>Pump house

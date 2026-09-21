@@ -156,6 +156,33 @@ export class DashboardService {
       })),
     };
   }
+
+  // District -> Block -> Zone hierarchy for the cascading geo filters used by
+  // the multi-site screens (Assets, Water Quality, map).
+  async geoTree() {
+    const sites = await this.prisma.site.findMany({
+      where: { kind: 'PUMP_STATION' },
+      select: { district: true, block: true, zone: true },
+    });
+    const tree = new Map<string, Map<string, Set<string>>>();
+    for (const s of sites) {
+      if (!s.district) continue;
+      if (!tree.has(s.district)) tree.set(s.district, new Map());
+      const bmap = tree.get(s.district)!;
+      const b = s.block ?? '';
+      if (!bmap.has(b)) bmap.set(b, new Set());
+      if (s.zone) bmap.get(b)!.add(s.zone);
+    }
+    return {
+      districts: [...tree.keys()].sort().map((d) => ({
+        name: d,
+        blocks: [...tree.get(d)!.keys()].sort().map((b) => ({
+          name: b,
+          zones: [...tree.get(d)!.get(b)!].sort(),
+        })),
+      })),
+    };
+  }
 }
 
 class AlertQueryDto {
@@ -197,9 +224,19 @@ export class MapController {
   }
 }
 
+@Controller('geo')
+export class GeoController {
+  constructor(private readonly svc: DashboardService) {}
+
+  @Public() @Feature('interactive_map') @Get('tree')
+  tree() {
+    return this.svc.geoTree();
+  }
+}
+
 @Module({
   providers: [DashboardService],
-  controllers: [DashboardController, AlertsController, MapController],
+  controllers: [DashboardController, AlertsController, MapController, GeoController],
   exports: [DashboardService],
 })
 export class DashboardModule {}

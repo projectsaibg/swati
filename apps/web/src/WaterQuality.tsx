@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { WqAnalyser, WqDetail, WqParamSummary, WqStatus, WqSummary, api } from './api';
+import { GeoQuery, WqAnalyser, WqDetail, WqParamSummary, WqStatus, WqSummary, api } from './api';
 import { AxisChart } from './charts';
+import { GeoFilter } from './GeoFilter';
 
 const stClass = (s: WqStatus | null) => (s ? `st-${s}` : 'st-none');
 function fmt(v: number | null): string {
@@ -53,16 +54,19 @@ export function WaterQuality() {
   const [sel, setSel] = useState<string | null>(null);
   const [detail, setDetail] = useState<WqDetail | null>(null);
   const [trendKey, setTrendKey] = useState('ph');
+  const [geo, setGeo] = useState<GeoQuery>({});
   const [err, setErr] = useState('');
 
   useEffect(() => {
-    const load = () => Promise.all([api.wqSummary(), api.wqAnalysers()])
+    const load = () => Promise.all([api.wqSummary(geo), api.wqAnalysers(geo)])
       .then(([s, a]) => { setSummary(s); setAnalysers(a); })
       .catch(() => setErr('Could not load water quality data.'));
     load();
     const t = setInterval(load, 45000); // live refresh for the demo/real feed
     return () => clearInterval(t);
-  }, []);
+  }, [geo]);
+  // Clear a drill-down selection when the geo scope changes.
+  useEffect(() => { setDma(null); setSel(null); }, [geo]);
   useEffect(() => {
     if (!sel) { setDetail(null); return; }
     const load = () => api.wqDetail(sel).then(setDetail).catch(() => setErr('Could not load analyser detail.'));
@@ -90,6 +94,10 @@ export function WaterQuality() {
           </p>
         </div>
         <div className="statuspills"><span className="spill live"><span className="livedot" /> LIVE</span></div>
+      </div>
+
+      <div className="panel" style={{ marginBottom: 12, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <GeoFilter value={geo} onChange={setGeo} />
       </div>
 
       {err && <div className="err">{err}</div>}

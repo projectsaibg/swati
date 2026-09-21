@@ -10,7 +10,7 @@
  *   - GET /api/pump-stations           — every station with whole-house KPIs
  *   - GET /api/pump-stations/:id        — station KPIs + pumps + timelines + charts
  */
-import { Controller, Get, Injectable, Module, NotFoundException, Param } from '@nestjs/common';
+import { Controller, Get, Injectable, Module, NotFoundException, Param, Query } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { Feature, Public } from './decorators';
 
@@ -45,9 +45,13 @@ export class PumpStationsService {
     };
   }
 
-  async list() {
+  async list(f?: { district?: string; block?: string; zone?: string }) {
+    const where: any = { kind: 'PUMP_STATION' };
+    if (f?.district) where.district = f.district;
+    if (f?.block) where.block = f.block;
+    if (f?.zone) where.zone = f.zone;
     const stations = await this.prisma.site.findMany({
-      where: { kind: 'PUMP_STATION' },
+      where,
       orderBy: { name: 'asc' },
       include: { assets: { select: { id: true, type: true, status: true } } },
     });
@@ -173,7 +177,9 @@ export class PumpStationsController {
   constructor(private readonly svc: PumpStationsService) {}
 
   @Public() @Feature('pump_stations') @Get()
-  list() { return this.svc.list(); }
+  list(@Query('district') district?: string, @Query('block') block?: string, @Query('zone') zone?: string) {
+    return this.svc.list({ district, block, zone });
+  }
 
   @Public() @Feature('pump_stations') @Get(':id')
   detail(@Param('id') id: string) { return this.svc.detail(id); }

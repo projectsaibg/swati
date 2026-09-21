@@ -58,6 +58,10 @@ export interface MapSite {
 }
 export interface MapData { sites: MapSite[]; assets: MapAsset[] }
 
+// Cascading geo filter shared by multi-site screens (Assets, Water Quality).
+export interface GeoQuery { district?: string; block?: string; zone?: string }
+export interface GeoTree { districts: { name: string; blocks: { name: string; zones: string[] }[] }[] }
+
 export interface EsaResult {
   supplyIndex: number | null; statorIndex: number | null; rotorIndex: number | null;
   eccentricityIndex: number | null; bearingIndex: number | null; loadIndex: number | null;
@@ -166,7 +170,8 @@ export const api = {
   mapPoints: () => http.get('/map/points').then((r) => r.data as MapData),
 
   // Pump & Motor ESA
-  conditionAssets: () => http.get('/condition/assets').then((r) => r.data as ConditionAsset[]),
+  conditionAssets: (f?: GeoQuery) => http.get('/condition/assets', { params: f }).then((r) => r.data as ConditionAsset[]),
+  geoTree: () => http.get('/geo/tree').then((r) => r.data as GeoTree),
   conditionDetail: (id: string) => http.get(`/condition/assets/${id}`).then((r) => r.data as ConditionDetail),
 
   // GIS import
@@ -174,12 +179,12 @@ export const api = {
     http.post('/gis/import', { assets }).then((r) => r.data as { created: number; updated: number; total: number }),
 
   // Water Quality
-  wqSummary: () => http.get('/water-quality/summary').then((r) => r.data as WqSummary),
-  wqAnalysers: () => http.get('/water-quality/analysers').then((r) => r.data as WqAnalyser[]),
+  wqSummary: (f?: GeoQuery) => http.get('/water-quality/summary', { params: f }).then((r) => r.data as WqSummary),
+  wqAnalysers: (f?: GeoQuery) => http.get('/water-quality/analysers', { params: f }).then((r) => r.data as WqAnalyser[]),
   wqDetail: (id: string) => http.get(`/water-quality/analysers/${id}`).then((r) => r.data as WqDetail),
 
   // Pump Stations
-  pumpStations: () => http.get('/pump-stations').then((r) => r.data as PumpStationSummary[]),
+  pumpStations: (f?: GeoQuery) => http.get('/pump-stations', { params: f }).then((r) => r.data as PumpStationSummary[]),
   pumpStation: (id: string) => http.get(`/pump-stations/${id}`).then((r) => r.data as PumpStationDetail),
 
   // NRW Explorer

@@ -13,9 +13,20 @@
  *   - GET /api/water-quality/analysers        — every WQA with latest params
  *   - GET /api/water-quality/analysers/:id    — one WQA: params + trends
  */
-import { Controller, Get, Injectable, Module, NotFoundException, Param } from '@nestjs/common';
+import { Controller, Get, Injectable, Module, NotFoundException, Param, Query } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { Feature, Public } from './decorators';
+
+// Cascading geo filter shared by the multi-site screens. Builds a Prisma
+// relation filter on the analyser's parent site; omitted keys mean "all".
+export type GeoFilter = { district?: string; block?: string; zone?: string };
+export function siteWhere(f?: GeoFilter) {
+  const sw: any = {};
+  if (f?.district) sw.district = f.district;
+  if (f?.block) sw.block = f.block;
+  if (f?.zone) sw.zone = f.zone;
+  return Object.keys(sw).length ? { site: sw } : {};
+}
 
 export type WqStatus = 'safe' | 'warn' | 'breach';
 type Kind = 'lowerBetter' | 'higherBetter' | 'band' | 'zero';
@@ -136,11 +147,11 @@ export class WaterQualityService {
     return map;
   }
 
-  private async analyserAssets() {
+  private async analyserAssets(f?: GeoFilter) {
     return this.prisma.asset.findMany({
-      where: { type: 'WQ_ANALYSER' },
+      where: { type: 'WQ_ANALYSER', ...siteWhere(f) },
       orderBy: { tag: 'asc' },
-      include: { site: { select: { id: true, name: true } }, connectivity: { select: { transport: true, lastSeen: true } } },
+      include: { site: { select: { id: true, name: true, district: true, block: true, zone: true } }, connectivity: { select: { transport: true, lastSeen: true } } },
     });
   }
 
@@ -155,8 +166,8 @@ export class WaterQualityService {
     });
   }
 
-  async analysers() {
-    const assets = await this.analyserAssets();
+  async analysers(f?: GeoFilter) {
+    const assets = await this.analyserAssets(f);
     const latest = await this.latestByAssetMetric(assets.map((a) => a.id));
     return assets.map((a) => {
       const params = this.paramsFor(a.id, latest);
@@ -164,14 +175,15 @@ export class WaterQualityService {
       return {
         id: a.id, tag: a.tag, name: a.name,
         dmaId: a.site?.id ?? null, dmaName: a.site?.name ?? 'Unassigned',
+        district: a.site?.district ?? null, block: a.site?.block ?? null, zone: a.site?.zone ?? null,
         transport: a.connectivity?.transport ?? null, lastSeen: a.connectivity?.lastSeen ?? null,
         status, params,
       };
     });
   }
 
-  async summary() {
-    const list = await this.analysers();
+  async summary(f?: GeoFilter) {
+    const list = await this.analysers(f);
     const ids = list.map((a) => a.id);
 
     // Recent rows (last 12h) for over-time compliance + per-parameter trend.
@@ -291,10 +303,14 @@ export class WaterQualityController {
   constructor(private readonly svc: WaterQualityService) {}
 
   @Public() @Feature('water_quality') @Get('summary')
-  summary() { return this.svc.summary(); }
+  summary(@Query('district') district?: string, @Query('block') block?: string, @Query('zone') zone?: string) {
+    return this.svc.summary({ district, block, zone });
+  }
 
   @Public() @Feature('water_quality') @Get('analysers')
-  analysers() { return this.svc.analysers(); }
+  analysers(@Query('district') district?: string, @Query('block') block?: string, @Query('zone') zone?: string) {
+    return this.svc.analysers({ district, block, zone });
+  }
 
   @Public() @Feature('water_quality') @Get('analysers/:id')
   detail(@Param('id') id: string) { return this.svc.detail(id); }

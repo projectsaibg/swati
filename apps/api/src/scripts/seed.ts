@@ -398,19 +398,15 @@ async function main() {
 
   // Demo valves (some remotely controllable) for the Valve Control module.
   const valveDefs = [
-    { tag: 'VLV-01', name: 'DMA North inlet', area: 'DMA North', valveType: 'Gate', status: 'Open', positionPct: 100, controllable: true },
-    { tag: 'VLV-02', name: 'DMA North zone A', area: 'DMA North', valveType: 'Butterfly', status: 'Throttled', positionPct: 60, controllable: true },
-    { tag: 'VLV-03', name: 'DMA South inlet', area: 'DMA South', valveType: 'Gate', status: 'Open', positionPct: 100, controllable: true },
-    { tag: 'VLV-04', name: 'DMA South washout', area: 'DMA South', valveType: 'Gate', status: 'Closed', positionPct: 0, controllable: false },
-    { tag: 'VLV-05', name: 'Trunk main isolation', area: 'Transmission', valveType: 'Butterfly', status: 'Open', positionPct: 100, controllable: true },
-    { tag: 'VLV-06', name: 'Reservoir outlet', area: 'WTP', valveType: 'Gate', status: 'Throttled', positionPct: 45, controllable: true },
+    { tag: 'VLV-01', name: 'DMA North inlet', area: 'DMA North', valveType: 'Gate', status: 'Open', positionPct: 100, controllable: true, upstreamBar: 5.8, downstreamBar: 5.4, flowKlmin: 12.6, health: 'Good' },
+    { tag: 'VLV-02', name: 'DMA North zone A', area: 'DMA North', valveType: 'Butterfly', status: 'Throttled', positionPct: 60, controllable: true, upstreamBar: 5.6, downstreamBar: 3.9, flowKlmin: 7.4, health: 'Good' },
+    { tag: 'VLV-03', name: 'DMA South inlet', area: 'DMA South', valveType: 'Gate', status: 'Open', positionPct: 100, controllable: true, upstreamBar: 5.2, downstreamBar: 5.0, flowKlmin: 10.1, health: 'Good' },
+    { tag: 'VLV-04', name: 'DMA South washout', area: 'DMA South', valveType: 'Gate', status: 'Closed', positionPct: 0, controllable: false, upstreamBar: 5.1, downstreamBar: 0.2, flowKlmin: 0, health: 'Attention' },
+    { tag: 'VLV-05', name: 'Trunk main isolation', area: 'Transmission', valveType: 'Butterfly', status: 'Open', positionPct: 100, controllable: true, upstreamBar: 6.4, downstreamBar: 6.1, flowKlmin: 24.3, health: 'Good' },
+    { tag: 'VLV-06', name: 'Reservoir outlet', area: 'WTP', valveType: 'Gate', status: 'Throttled', positionPct: 45, controllable: true, upstreamBar: 4.9, downstreamBar: 2.8, flowKlmin: 5.7, health: 'Good' },
   ];
   for (const v of valveDefs) {
-    await prisma.valve.upsert({
-      where: { tag: v.tag },
-      update: { name: v.name, area: v.area, valveType: v.valveType, status: v.status, positionPct: v.positionPct, controllable: v.controllable },
-      create: v,
-    });
+    await prisma.valve.upsert({ where: { tag: v.tag }, update: v, create: v });
   }
 
   console.log('Seed complete.');

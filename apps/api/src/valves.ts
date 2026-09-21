@@ -8,7 +8,7 @@
 import { BadRequestException, Body, Controller, Get, Injectable, Module, NotFoundException, Param, Post } from '@nestjs/common';
 import { IsIn, IsNumber, IsOptional, Max, Min } from 'class-validator';
 import { PrismaService } from './prisma.service';
-import { CurrentUser, Feature, Perm } from './decorators';
+import { CurrentUser, Feature, Perm, Public } from './decorators';
 
 class OperateDto {
   @IsIn(['OPEN', 'CLOSE', 'SET']) action!: 'OPEN' | 'CLOSE' | 'SET';
@@ -27,6 +27,7 @@ export class ValvesService {
     return valves.map((v) => ({
       id: v.id, tag: v.tag, name: v.name, area: v.area, valveType: v.valveType,
       status: v.status, positionPct: v.positionPct, controllable: v.controllable,
+      upstreamBar: v.upstreamBar, downstreamBar: v.downstreamBar, flowKlmin: v.flowKlmin, health: v.health,
       lastOperated: v.lastOperated,
       lastOperator: v.ops[0]?.operator ?? null,
     }));
@@ -40,7 +41,9 @@ export class ValvesService {
     if (!v) throw new NotFoundException('Valve not found');
     return {
       id: v.id, tag: v.tag, name: v.name, area: v.area, valveType: v.valveType,
-      status: v.status, positionPct: v.positionPct, controllable: v.controllable, lastOperated: v.lastOperated,
+      status: v.status, positionPct: v.positionPct, controllable: v.controllable,
+      upstreamBar: v.upstreamBar, downstreamBar: v.downstreamBar, flowKlmin: v.flowKlmin, health: v.health,
+      lastOperated: v.lastOperated,
       ops: v.ops.map((o) => ({ id: o.id, action: o.action, positionPct: o.positionPct, fromStatus: o.fromStatus, toStatus: o.toStatus, operator: o.operator, ts: o.ts })),
     };
   }
@@ -75,10 +78,10 @@ export class ValvesService {
 export class ValvesController {
   constructor(private readonly svc: ValvesService) {}
 
-  @Feature('valve_control') @Get()
+  @Public() @Feature('valve_control') @Get()
   list() { return this.svc.list(); }
 
-  @Feature('valve_control') @Get(':id')
+  @Public() @Feature('valve_control') @Get(':id')
   detail(@Param('id') id: string) { return this.svc.detail(id); }
 
   @Feature('valve_control') @Perm('valve.operate') @Post(':id/operate')

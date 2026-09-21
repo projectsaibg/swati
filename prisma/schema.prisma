@@ -405,6 +405,10 @@ model Valve {
   status       String    @default("Open")
   positionPct  Decimal?  @db.Decimal(5, 1)
   controllable Boolean   @default(false)
+  upstreamBar  Decimal?  @db.Decimal(6, 2)
+  downstreamBar Decimal? @db.Decimal(6, 2)
+  flowKlmin    Decimal?  @db.Decimal(8, 2)
+  health       String?
   lastOperated DateTime?
   createdAt    DateTime  @default(now())
   ops          ValveOp[]

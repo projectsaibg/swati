@@ -14,6 +14,7 @@ import { WaterQualityModule } from './wq';
 import { PumpStationsModule } from './pumps';
 import { FieldVerificationModule } from './fieldverify';
 import { ValvesModule } from './valves';
+import { NrwModule } from './nrw';
 import { DemoSimulator } from './simulate';
 import { FeatureGuard, HttpExceptionFilter, JwtAuthGuard, PermissionsGuard } from './common';
 import { Public } from './decorators';
@@ -43,6 +44,7 @@ export class HealthController {
     PumpStationsModule,
     FieldVerificationModule,
     ValvesModule,
+    NrwModule,
   ],
   controllers: [HealthController],
   providers: [

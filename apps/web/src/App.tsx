@@ -9,6 +9,7 @@ import { WaterQuality } from './WaterQuality';
 import { PumpStations } from './PumpStations';
 import { FieldVerification } from './FieldVerification';
 import { ValveControl } from './ValveControl';
+import { NRWExplorer } from './NRWExplorer';
 import { Admin } from './Admin';
 import { NAV } from './registry';
 import { ReactNode } from 'react';
@@ -22,6 +23,7 @@ const PAGE_COMPONENTS: Record<string, ReactNode> = {
   pump_stations: <PumpStations />,
   field_verification: <FieldVerification />,
   valve_control: <ValveControl />,
+  nrw_explorer: <NRWExplorer />,
 };
 
 function AppRoutes() {

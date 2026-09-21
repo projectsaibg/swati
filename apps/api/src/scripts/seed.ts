@@ -409,6 +409,27 @@ async function main() {
     await prisma.valve.upsert({ where: { tag: v.tag }, update: v, create: v });
   }
 
+  // NRW records: per-DMA input vs billed across 6 months (improving trend).
+  const nrwAreas = [
+    { area: 'DMA North', input: 42000, startNrw: 0.28, endNrw: 0.19 },
+    { area: 'DMA South', input: 38000, startNrw: 0.41, endNrw: 0.33 },
+    { area: 'Central Zone', input: 55000, startNrw: 0.22, endNrw: 0.16 },
+    { area: 'Coastal Zone', input: 30000, startNrw: 0.35, endNrw: 0.30 },
+  ];
+  const nrwPeriods = ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09'];
+  await prisma.nrwRecord.deleteMany({});
+  const nrwRows: { area: string; period: string; inputKl: number; billedKl: number; nrwPct: number }[] = [];
+  for (const a of nrwAreas) {
+    for (let i = 0; i < nrwPeriods.length; i++) {
+      const t = i / (nrwPeriods.length - 1);
+      const nrw = a.startNrw + (a.endNrw - a.startNrw) * t;
+      const input = Math.round(a.input * (1 + (Math.random() - 0.5) * 0.04));
+      const billed = Math.round(input * (1 - nrw));
+      nrwRows.push({ area: a.area, period: nrwPeriods[i], inputKl: input, billedKl: billed, nrwPct: Math.round(nrw * 1000) / 10 });
+    }
+  }
+  await prisma.nrwRecord.createMany({ data: nrwRows });
+
   console.log('Seed complete.');
   console.log(`Admin login: ${adminEmail}`);
   console.log(`Admin password (shown once): ${adminPassword}`);

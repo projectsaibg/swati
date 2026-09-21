@@ -5,7 +5,7 @@
  *  - POST /api/valves/:id/operate  (valve.operate) OPEN / CLOSE / SET position;
  *      every operation is logged to ValveOp (who, when, from->to).
  */
-import { BadRequestException, Body, Controller, Get, Injectable, Module, NotFoundException, Param, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Injectable, Module, NotFoundException, Param, Post, Query } from '@nestjs/common';
 import { IsIn, IsNumber, IsOptional, Max, Min } from 'class-validator';
 import { PrismaService } from './prisma.service';
 import { CurrentUser, Feature, Perm, Public } from './decorators';
@@ -19,13 +19,19 @@ class OperateDto {
 export class ValvesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list() {
+  async list(f?: { district?: string; block?: string; zone?: string }) {
+    const where: any = {};
+    if (f?.district) where.district = f.district;
+    if (f?.block) where.block = f.block;
+    if (f?.zone) where.zone = f.zone;
     const valves = await this.prisma.valve.findMany({
+      where,
       orderBy: { tag: 'asc' },
       include: { ops: { orderBy: { ts: 'desc' }, take: 1 } },
     });
     return valves.map((v) => ({
       id: v.id, tag: v.tag, name: v.name, area: v.area, valveType: v.valveType,
+      district: v.district, block: v.block, zone: v.zone,
       status: v.status, positionPct: v.positionPct, controllable: v.controllable,
       upstreamBar: v.upstreamBar, downstreamBar: v.downstreamBar, flowKlmin: v.flowKlmin, health: v.health,
       lastOperated: v.lastOperated,
@@ -79,7 +85,9 @@ export class ValvesController {
   constructor(private readonly svc: ValvesService) {}
 
   @Public() @Feature('valve_control') @Get()
-  list() { return this.svc.list(); }
+  list(@Query('district') district?: string, @Query('block') block?: string, @Query('zone') zone?: string) {
+    return this.svc.list({ district, block, zone });
+  }
 
   @Public() @Feature('valve_control') @Get(':id')
   detail(@Param('id') id: string) { return this.svc.detail(id); }

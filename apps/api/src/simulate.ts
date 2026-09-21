@@ -10,6 +10,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { WQ_METRICS } from './wq';
+import { computeEsa } from './esa';
 
 const WQ_KEYS = WQ_METRICS.map((m) => m.key);
 const UNIT = new Map(WQ_METRICS.map((m) => [m.key, m.unit]));
@@ -122,6 +123,7 @@ export class DemoSimulator implements OnModuleInit, OnModuleDestroy {
     const now = Date.now();
     const rows: { assetId: string; ts: Date; metric: string; value: number; unit: string; quality: string; source: string }[] = [];
     const devIds: string[] = [];
+    const esaRows: any[] = []; // live ESA condition readings so Pump & Motor moves
     for (const s of stations) {
       const pumps = s.assets.filter((a) => this.PUMP_TYPES.includes(a.type)).sort((a, b) => a.tag.localeCompare(b.tag));
       const total = pumps.length || 1;
@@ -134,6 +136,39 @@ export class DemoSimulator implements OnModuleInit, OnModuleDestroy {
         rows.push({ assetId: p.id, ts: new Date(now), metric: 'run_state', value: on ? 1 : 0, unit: '', quality: 'good', source: 'sim' });
         rows.push({ assetId: p.id, ts: new Date(now), metric: 'power_kw', value: power, unit: 'kW', quality: 'good', source: 'sim' });
         rows.push({ assetId: p.id, ts: new Date(now), metric: 'flow_klh', value: flow, unit: 'kL/h', quality: 'good', source: 'sim' });
+
+        // Live ESA condition reading (jittered around a healthy/faulted profile)
+        // so the Pump & Motor screen reads as live, not static.
+        const bad = p.status === 'FAULT';
+        const j = (Math.random() - 0.5);
+        const b = bad
+          ? { v: 400, c: 168, pf: 0.82, vu: 4.4, cu: 11, thv: 6.2, thc: 12, load: 110, eff: 75, rpm: 1456, vib: 6.6, wt: 83, bt: 88 }
+          : { v: 413, c: 116, pf: 0.9, vu: 1.0, cu: 2.4, thv: 2.4, thc: 3.6, load: 82, eff: 91, rpm: 1478, vib: 2.2, wt: 60, bt: 54 };
+        const input = {
+          voltageV: b.v, ratedVoltageV: 415,
+          currentA: b.c * (1 + 0.03 * j), ratedCurrentA: kw * 1.8,
+          powerFactor: b.pf,
+          voltageUnbalancePct: b.vu * (1 + 0.12 * j),
+          currentUnbalancePct: b.cu * (1 + 0.12 * j),
+          thdVoltagePct: b.thv,
+          thdCurrentPct: b.thc * (1 + 0.1 * j),
+          loadPct: b.load, efficiencyPct: b.eff,
+          speedRpm: b.rpm, ratedSpeedRpm: 1480,
+          vibrationMmS: b.vib * (1 + 0.1 * j),
+          windingTempC: b.wt, bearingTempC: b.bt * (1 + 0.06 * j),
+        };
+        const esa = computeEsa(input);
+        esaRows.push({
+          assetId: p.id, ts: new Date(now),
+          voltageV: input.voltageV, currentA: input.currentA, powerFactor: input.powerFactor,
+          voltageUnbalancePct: input.voltageUnbalancePct, currentUnbalancePct: input.currentUnbalancePct,
+          thdVoltagePct: input.thdVoltagePct, thdCurrentPct: input.thdCurrentPct,
+          loadPct: input.loadPct, efficiencyPct: input.efficiencyPct, speedRpm: input.speedRpm,
+          vibrationMmS: input.vibrationMmS, windingTempC: input.windingTempC, bearingTempC: input.bearingTempC,
+          statorIndex: esa.statorIndex, rotorIndex: esa.rotorIndex, bearingIndex: esa.bearingIndex,
+          eccentricityIndex: esa.eccentricityIndex, supplyIndex: esa.supplyIndex, loadIndex: esa.loadIndex,
+          healthScore: esa.healthScore, source: 'sim',
+        });
       });
       const sensors = s.assets.filter((a) => this.SENSOR_METRICS[a.type]);
       for (const dev of sensors) {
@@ -149,5 +184,6 @@ export class DemoSimulator implements OnModuleInit, OnModuleDestroy {
       await this.prisma.measurement.createMany({ data: rows });
       if (devIds.length) await this.prisma.connectivity.updateMany({ where: { assetId: { in: devIds } }, data: { lastSeen: new Date(now) } });
     }
+    if (esaRows.length) await this.prisma.reading.createMany({ data: esaRows });
   }
 }

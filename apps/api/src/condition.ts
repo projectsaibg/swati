@@ -6,7 +6,7 @@
  *      electrical reading; the ESA engine computes sub-indices + health, the
  *      reading is stored, and an alert is raised on ALARM/CRITICAL.
  */
-import { Body, Controller, Get, Injectable, Module, NotFoundException, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Injectable, Module, NotFoundException, Param, Post, Query } from '@nestjs/common';
 import { IsNumber, IsOptional } from 'class-validator';
 import { PrismaService } from './prisma.service';
 import { Feature, Perm, Public } from './decorators';
@@ -52,11 +52,18 @@ class IngestReadingDto {
 export class ConditionService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list() {
+  async list(f?: { district?: string; block?: string; zone?: string }) {
+    const sw: any = {};
+    if (f?.district) sw.district = f.district;
+    if (f?.block) sw.block = f.block;
+    if (f?.zone) sw.zone = f.zone;
     const assets = await this.prisma.asset.findMany({
-      where: { type: { in: MOTOR_TYPES as unknown as any[] } },
+      where: { type: { in: MOTOR_TYPES as unknown as any[] }, ...(Object.keys(sw).length ? { site: sw } : {}) },
       orderBy: { tag: 'asc' },
-      include: { readings: { orderBy: { ts: 'desc' }, take: 1 } },
+      include: {
+        readings: { orderBy: { ts: 'desc' }, take: 1 },
+        site: { select: { name: true, district: true, block: true, zone: true } },
+      },
     });
     return assets.map((a) => {
       const r = a.readings[0];
@@ -64,6 +71,8 @@ export class ConditionService {
       return {
         id: a.id, tag: a.tag, name: a.name, type: a.type, status: a.status,
         ratedPowerKw: a.ratedPowerKw,
+        siteName: a.site?.name ?? null,
+        district: a.site?.district ?? null, block: a.site?.block ?? null, zone: a.site?.zone ?? null,
         lastReadingTs: r?.ts ?? null,
         esa,
       };
@@ -149,8 +158,8 @@ export class ConditionController {
   constructor(private readonly svc: ConditionService) {}
 
   @Public() @Feature('condition_monitoring') @Get('assets')
-  list() {
-    return this.svc.list();
+  list(@Query('district') district?: string, @Query('block') block?: string, @Query('zone') zone?: string) {
+    return this.svc.list({ district, block, zone });
   }
 
   @Public() @Feature('condition_monitoring') @Get('assets/:id')

@@ -412,6 +412,9 @@ model Valve {
   tag          String    @unique
   name         String
   area         String?
+  district     String?
+  block        String?
+  zone         String?
   valveType    String?
   status       String    @default("Open")
   positionPct  Decimal?  @db.Decimal(5, 1)

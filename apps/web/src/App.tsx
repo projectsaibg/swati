@@ -12,6 +12,7 @@ import { ValveControl } from './ValveControl';
 import { NRWExplorer } from './NRWExplorer';
 import { LeakDetection } from './LeakDetection';
 import { Maintenance } from './Maintenance';
+import { Billing } from './Billing';
 import { Admin } from './Admin';
 import { NAV } from './registry';
 import { ReactNode } from 'react';
@@ -28,6 +29,7 @@ const PAGE_COMPONENTS: Record<string, ReactNode> = {
   nrw_explorer: <NRWExplorer />,
   leak_detection: <LeakDetection />,
   maintenance: <Maintenance />,
+  billing: <Billing />,
 };
 
 function AppRoutes() {

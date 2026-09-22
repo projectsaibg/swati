@@ -17,6 +17,7 @@ import { ValvesModule } from './valves';
 import { NrwModule } from './nrw';
 import { LeakModule } from './leak';
 import { MaintenanceModule } from './maintenance';
+import { BillingModule } from './billing';
 import { DemoSimulator } from './simulate';
 import { FeatureGuard, HttpExceptionFilter, JwtAuthGuard, PermissionsGuard } from './common';
 import { Public } from './decorators';
@@ -49,6 +50,7 @@ export class HealthController {
     NrwModule,
     LeakModule,
     MaintenanceModule,
+    BillingModule,
   ],
   controllers: [HealthController],
   providers: [

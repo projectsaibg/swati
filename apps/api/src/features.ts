@@ -32,7 +32,7 @@ export const FEATURE_REGISTRY: FeatureDef[] = [
   { key: 'nrw_explorer', module: 'NRW Explorer', tier: 'VECTOR', visibility: 'PUBLIC' },
   { key: 'valve_control', module: 'Valve Control', tier: 'VECTOR', visibility: 'PUBLIC' },
   { key: 'leak_detection', module: 'Leak Detection', tier: 'VELOCITY', visibility: 'PUBLIC' },
-  { key: 'billing', module: 'Billing & Revenue', tier: 'VELOCITY', visibility: 'LOGIN' },
+  { key: 'billing', module: 'Billing & Revenue', tier: 'VELOCITY', visibility: 'PUBLIC' },
   { key: 'maintenance', module: 'Maintenance', tier: 'VELOCITY', visibility: 'PUBLIC' },
   { key: 'condition_monitoring', module: 'Pump/Motor ESA', tier: 'VELOCITY', visibility: 'PUBLIC' },
   { key: 'pump_stations', module: 'Pump Stations', tier: 'VECTOR', visibility: 'PUBLIC' },

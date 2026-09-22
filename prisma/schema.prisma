@@ -490,6 +490,27 @@ model WorkOrder {
   @@index([district, block])
 }
 
+// Billing & Revenue: one record per site per month. Geo columns denormalised so
+// the screen shares the District -> Block -> Zone filter. Amounts in INR.
+model BillingRecord {
+  id           String   @id @default(cuid())
+  siteId       String?
+  siteName     String?
+  district     String?
+  block        String?
+  zone         String?
+  period       String // YYYY-MM
+  connections  Int      @default(0)
+  demandInr    Decimal  @default(0) @db.Decimal(14, 2)
+  collectedInr Decimal  @default(0) @db.Decimal(14, 2)
+  arrearsInr   Decimal  @default(0) @db.Decimal(14, 2)
+  billedKl     Decimal  @default(0) @db.Decimal(14, 2)
+  createdAt    DateTime @default(now())
+
+  @@index([period])
+  @@index([district, block])
+}
+
 model IlkDetection {
   id         String    @id @default(cuid())
   ref        String

@@ -20,6 +20,7 @@ export const TIER_ORDER: TierName[] = ['BASE', 'VECTOR', 'VELOCITY', 'QUANTUM'];
 
 export const FEATURE_REGISTRY: FeatureDef[] = [
   { key: 'executive_overview', module: 'Executive Overview', tier: 'BASE', visibility: 'PUBLIC' },
+  { key: 'command_center', module: 'Command Center', tier: 'BASE', visibility: 'PUBLIC' },
   { key: 'interactive_map', module: 'Interactive Map', tier: 'BASE', visibility: 'PUBLIC' },
   { key: 'action_center', module: 'Action Center', tier: 'BASE', visibility: 'LOGIN' },
   { key: 'network_analysis', module: 'Network Analysis', tier: 'BASE', visibility: 'LOGIN' },

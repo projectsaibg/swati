@@ -213,6 +213,9 @@ export const api = {
   billingSummary: (f?: GeoQuery) => http.get('/billing/summary', { params: f }).then((r) => r.data as BillingSummary),
   billingAccounts: (f?: GeoQuery) => http.get('/billing/accounts', { params: f }).then((r) => r.data as BillingAccount[]),
 
+  // Command Center
+  commandCenter: () => http.get('/command-center/summary').then((r) => r.data as CommandCenterData),
+
   // Field Instruments
   instrumentSummary: (f?: GeoQuery) => http.get('/instruments/summary', { params: f }).then((r) => r.data as InstrumentSummary),
   instrumentList: (f?: GeoQuery & { type?: string }) => http.get('/instruments/list', { params: f }).then((r) => r.data as Instrument[]),
@@ -321,6 +324,20 @@ export interface Instrument {
 }
 export interface InstrumentSummary {
   total: number; byType: Record<string, number>; online: number; offline: number;
+}
+
+export interface CommandCenterData {
+  pressure: { psi: number; gpm: number };
+  consumption: { label: string; value: number }[];
+  pipeCondition: { good: number; fair: number; poor: number; critical: number; overallHealth: number };
+  assets: { treatmentPlants: number; pumpStations: number; valves: number; customers: number; networkMiles: number };
+  supplyDemand: { supplyPsi: number; totalDemandGpm: number; systemDemandGpm: number; supplyReserveMld: number };
+  plantStation: { label: string; production: number; leakage: number; wamr: number; ami: number }[];
+  maintenance: { code: string; title: string; site: string | null; priority: string; due: string | null }[];
+  waterMainBreaks: { label: string; breaks: number; prev: number }[];
+  pumpStatus: { name: string; cells: number[] }[];
+  leaks: { lat: number; lng: number; severity: string }[];
+  updatedAt: string;
 }
 
 export interface NrwSummary {

@@ -14,6 +14,7 @@ import { LeakDetection } from './LeakDetection';
 import { Maintenance } from './Maintenance';
 import { Billing } from './Billing';
 import { Instruments } from './Instruments';
+import { CommandCenter } from './CommandCenter';
 import { Admin } from './Admin';
 import { NAV } from './registry';
 import { ReactNode } from 'react';
@@ -32,6 +33,7 @@ const PAGE_COMPONENTS: Record<string, ReactNode> = {
   maintenance: <Maintenance />,
   billing: <Billing />,
   instrumentation: <Instruments />,
+  command_center: <CommandCenter />,
 };
 
 function AppRoutes() {

@@ -465,6 +465,31 @@ model NrwRecord {
   createdAt DateTime @default(now())
 }
 
+// Maintenance work orders. siteId is a plain polymorphic reference (no FK) with
+// district/block/zone denormalised so the screen shares the geo filter.
+model WorkOrder {
+  id          String    @id @default(cuid())
+  code        String    @unique // WO-0001
+  title       String
+  type        String    @default("PREVENTIVE") // PREVENTIVE | CORRECTIVE
+  priority    String    @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  status      String    @default("OPEN") // OPEN | IN_PROGRESS | DONE | CANCELLED
+  siteId      String?
+  siteName    String?
+  assetTag    String?
+  district    String?
+  block       String?
+  zone        String?
+  assignee    String?
+  notes       String?
+  dueAt       DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([status])
+  @@index([district, block])
+}
+
 model IlkDetection {
   id         String    @id @default(cuid())
   ref        String

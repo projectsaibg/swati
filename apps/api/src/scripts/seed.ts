@@ -536,6 +536,57 @@ async function main() {
   }
   await prisma.nrwRecord.createMany({ data: nrwRows });
 
+  // Maintenance work orders: corrective (auto-raised from faulted pumps) plus a
+  // preventive servicing schedule across a slice of sites, with realistic
+  // statuses and due dates (some overdue). Geo columns are denormalised so the
+  // Maintenance screen shares the District -> Block -> Zone filter.
+  await prisma.workOrder.deleteMany({});
+  const assignees = ['Priya Executive', 'Arun Assistant', 'Field Officer One'];
+  const day = 24 * 60 * 60 * 1000;
+  const woRows: any[] = [];
+  let woN = 0;
+
+  const faultedPumps = await prisma.asset.findMany({
+    where: { type: 'MOTOR_PUMP', status: 'FAULT' },
+    include: { site: { select: { id: true, name: true, district: true, block: true, zone: true } } },
+  });
+  for (const p of faultedPumps) {
+    woN++;
+    woRows.push({
+      code: `WO-${String(woN).padStart(4, '0')}`,
+      title: `Investigate pump fault — ${p.tag}`,
+      type: 'CORRECTIVE', priority: woN % 2 === 0 ? 'CRITICAL' : 'HIGH', status: woN % 3 === 0 ? 'IN_PROGRESS' : 'OPEN',
+      siteId: p.site?.id ?? null, siteName: p.site?.name ?? null, assetTag: p.tag,
+      district: p.site?.district ?? null, block: p.site?.block ?? null, zone: p.site?.zone ?? null,
+      assignee: assignees[woN % assignees.length],
+      notes: 'Auto-raised from ESA fault. Inspect motor windings and bearings.',
+      dueAt: new Date(now + ((woN % 4) - 1) * day),
+    });
+  }
+
+  const svcSites = await prisma.site.findMany({ where: { kind: 'PUMP_STATION' }, select: { id: true, name: true, district: true, block: true, zone: true, code: true } });
+  for (const s of svcSites) {
+    const seed = hash(s.code ?? s.id);
+    if (seed % 4 !== 0) continue; // ~25% of sites carry an active preventive WO
+    woN++;
+    const bucket = seed % 5;
+    const status = bucket === 0 ? 'DONE' : bucket === 1 ? 'IN_PROGRESS' : 'OPEN';
+    const dueOffset = (seed % 30) - 10; // -10..+19 days (some overdue)
+    woRows.push({
+      code: `WO-${String(woN).padStart(4, '0')}`,
+      title: `Quarterly pump servicing — ${s.name.split(' — ')[0]}`,
+      type: 'PREVENTIVE', priority: seed % 3 === 0 ? 'MEDIUM' : 'LOW', status,
+      siteId: s.id, siteName: s.name, assetTag: null,
+      district: s.district, block: s.block, zone: s.zone,
+      assignee: assignees[seed % assignees.length],
+      notes: 'Scheduled preventive maintenance: lubricate, inspect and test.',
+      dueAt: new Date(now + dueOffset * day),
+      completedAt: status === 'DONE' ? new Date(now - (seed % 20) * day) : null,
+    });
+  }
+  await prisma.workOrder.createMany({ data: woRows });
+  console.log(`Seeded ${woRows.length} work orders (${faultedPumps.length} corrective).`);
+
   console.log('Seed complete.');
   console.log(`Admin login: ${adminEmail}`);
   console.log(`Admin password (shown once): ${adminPassword}`);

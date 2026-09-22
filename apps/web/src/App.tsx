@@ -11,6 +11,7 @@ import { FieldVerification } from './FieldVerification';
 import { ValveControl } from './ValveControl';
 import { NRWExplorer } from './NRWExplorer';
 import { LeakDetection } from './LeakDetection';
+import { Maintenance } from './Maintenance';
 import { Admin } from './Admin';
 import { NAV } from './registry';
 import { ReactNode } from 'react';
@@ -26,6 +27,7 @@ const PAGE_COMPONENTS: Record<string, ReactNode> = {
   valve_control: <ValveControl />,
   nrw_explorer: <NRWExplorer />,
   leak_detection: <LeakDetection />,
+  maintenance: <Maintenance />,
 };
 
 function AppRoutes() {

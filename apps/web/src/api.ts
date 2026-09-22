@@ -201,6 +201,14 @@ export const api = {
   leakCandidates: (f?: GeoQuery) => http.get('/leak/candidates', { params: f }).then((r) => r.data as LeakCandidate[]),
   flagLeak: (siteId: string) => http.post(`/leak/flag/${siteId}`).then((r) => r.data as { alertId: string; severity: string }),
 
+  // Maintenance
+  maintenanceSummary: (f?: GeoQuery) => http.get('/maintenance/summary', { params: f }).then((r) => r.data as MaintenanceSummary),
+  maintenanceOrders: (f?: GeoQuery) => http.get('/maintenance/orders', { params: f }).then((r) => r.data as WorkOrder[]),
+  createWorkOrder: (dto: Partial<WorkOrder> & { title: string; siteId?: string }) =>
+    http.post('/maintenance/orders', dto).then((r) => r.data as WorkOrder),
+  updateWorkOrder: (id: string, dto: { status?: string; priority?: string; assignee?: string; notes?: string }) =>
+    http.patch(`/maintenance/orders/${id}`, dto).then((r) => r.data as WorkOrder[]),
+
   // Field Verification
   fieldVerifications: () => http.get('/field-verification').then((r) => r.data as FieldVerificationRow[]),
   createFieldVerification: (form: FormData) =>
@@ -270,6 +278,19 @@ export interface LeakSummary {
   totalCandidates: number; high: number; medium: number; low: number;
   totalLossKld: number; avgNrwPct: number | null;
   worst: { name: string; estLossKld: number; district: string | null; block: string | null; zone: string | null } | null;
+}
+
+export interface WorkOrder {
+  id: string; code: string; title: string;
+  type: string; priority: string; status: string;
+  siteName: string | null; assetTag: string | null;
+  district: string | null; block: string | null; zone: string | null;
+  assignee: string | null; notes: string | null;
+  dueAt: string | null; completedAt: string | null; createdAt: string;
+}
+export interface MaintenanceSummary {
+  total: number; open: number; inProgress: number; done: number;
+  overdue: number; preventive: number; corrective: number; highPriority: number;
 }
 
 export interface NrwSummary {

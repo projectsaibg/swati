@@ -126,6 +126,32 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .sectlabel { display: flex; align-items: center; gap: 10px; justify-content: center; color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; margin: 6px 0 16px; }
 .sectlabel::before, .sectlabel::after { content: ""; height: 1px; flex: 1; background: linear-gradient(90deg, transparent, var(--line), transparent); }
 
+/* Executive Overview tier containers — each tier is a prominent, separated box */
+.tierband { --tc: var(--accent); background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--tc); border-radius: 16px; padding: 16px 18px 20px; margin-bottom: 20px; box-shadow: 0 12px 34px -26px var(--tc); }
+.tierband.t-slate { --tc: #64748b; } .tierband.t-cyan { --tc: var(--accent); } .tierband.t-teal { --tc: var(--accent2); } .tierband.t-violet { --tc: #8b5cf6; }
+.tierband-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.tierband-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.tierband-name { font-size: 22px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: var(--tc); }
+.tierband-tag { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); border: 1px solid var(--tc); border-radius: 999px; padding: 2px 8px; }
+.tierband-tagline { font-size: 13px; color: var(--muted); }
+.tierband-count { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+
+/* Admin tier switch + modules-by-tier tiles */
+.tierswitch { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.tierseg { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; text-align: left; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface2); color: var(--ink); transition: border-color .12s, box-shadow .12s; }
+.tierseg .tierseg-name { font-size: 16px; font-weight: 800; letter-spacing: .5px; }
+.tierseg .tierseg-tag { font-size: 12px; color: var(--muted); }
+.tierseg .tierseg-state { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+.tierseg.on { border-color: var(--accent2); }
+.tierseg.on .tierseg-state { color: var(--ok); }
+.tierseg.current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 12px 30px -20px var(--accent); }
+.tierseg.current .tierseg-state { color: #fff; }
+.tierseg:disabled { opacity: .7; cursor: default; }
+.tierrow-head { font-size: 13px; letter-spacing: .6px; text-transform: uppercase; margin-bottom: 8px; }
+.modtiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+.modtile { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); border-left: 3px solid var(--line); background: var(--surface2); }
+.modtile.on { border-left-color: var(--ok); }
+
 .modgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
 .modcard { --c: var(--accent); position: relative; border-radius: 16px; padding: 18px; background: var(--surface);
   border: 1px solid var(--line); border-top: 3px solid var(--c); display: flex; flex-direction: column; gap: 10px;

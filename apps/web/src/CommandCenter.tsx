@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { CommandCenterData, api } from './api';
@@ -7,29 +7,37 @@ import { Icon } from './icons';
 
 const CSS = (v: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || v;
 const nfmt = (n: number) => n.toLocaleString('en-IN');
+const fmtTick = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
 
-// --- semicircular arc gauge ------------------------------------------------
-function ArcGauge({ value, max, label, unit, color }: { value: number; max: number; label: string; unit: string; color: string }) {
-  const W = 150, H = 96, cx = W / 2, cy = 84, r = 62;
+// --- analog needle gauge ---------------------------------------------------
+function AnalogGauge({ value, max, unit, color, majors }: { value: number; max: number; unit: string; color: string; majors: number }) {
+  const cx = 80, cy = 80, r = 62, start = 135, sweep = 270;
+  const ang = (f: number) => ((start + f * sweep) * Math.PI) / 180;
+  const pt = (f: number, rr: number): [number, number] => [cx + rr * Math.cos(ang(f)), cy + rr * Math.sin(ang(f))];
   const frac = Math.max(0, Math.min(1, value / max));
-  const pol = (a: number) => [cx + r * Math.cos(Math.PI - a * Math.PI), cy - r * Math.sin(Math.PI - a * Math.PI)];
-  const arc = (a0: number, a1: number) => {
-    const [x0, y0] = pol(a0); const [x1, y1] = pol(a1);
-    return `M ${x0} ${y0} A ${r} ${r} 0 ${a1 - a0 > 0.5 ? 1 : 0} 1 ${x1} ${y1}`;
+  const arcPath = (f0: number, f1: number, rr: number) => {
+    const [x0, y0] = pt(f0, rr); const [x1, y1] = pt(f1, rr);
+    return `M ${x0} ${y0} A ${rr} ${rr} 0 ${(f1 - f0) * sweep > 180 ? 1 : 0} 1 ${x1} ${y1}`;
   };
-  const ticks = [0, 0.25, 0.5, 0.75, 1];
+  const ticks = Array.from({ length: majors + 1 }, (_, i) => i / majors);
+  const [nx, ny] = pt(frac, r - 15);
   return (
-    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${label} ${value} ${unit}`}>
-      <path d={arc(0, 1)} fill="none" stroke="var(--line)" strokeWidth={9} strokeLinecap="round" />
-      <path d={arc(0, frac)} fill="none" stroke={color} strokeWidth={9} strokeLinecap="round" />
+    <svg viewBox="0 0 160 160" width={148} height={138} role="img" aria-label={`${value} ${unit}`}>
+      <path d={arcPath(0, 1, r)} stroke="var(--line)" strokeWidth={8} fill="none" strokeLinecap="round" />
+      <path d={arcPath(0, frac, r)} stroke={color} strokeWidth={8} fill="none" strokeLinecap="round" />
       {ticks.map((t, i) => {
-        const [x, y] = pol(t); const xi = cx + (r - 13) * Math.cos(Math.PI - t * Math.PI); const yi = cy - (r - 13) * Math.sin(Math.PI - t * Math.PI);
-        return <line key={i} x1={x} y1={y} x2={xi} y2={yi} stroke="var(--muted)" strokeWidth={1} />;
+        const [x0, y0] = pt(t, r - 5); const [x1, y1] = pt(t, r - 13); const [lx, ly] = pt(t, r - 25);
+        return (
+          <g key={i}>
+            <line x1={x0} y1={y0} x2={x1} y2={y1} stroke="var(--muted)" strokeWidth={1.5} />
+            <text x={lx} y={ly} fontSize={8.5} fill="var(--muted)" textAnchor="middle" dominantBaseline="middle">{fmtTick(Math.round(t * max))}</text>
+          </g>
+        );
       })}
-      <text x={cx} y={cy - 14} textAnchor="middle" fontSize={24} fontWeight={800} fill="var(--ink)" className="tnum">{nfmt(value)}</text>
-      <text x={cx} y={cy + 4} textAnchor="middle" fontSize={11} fill="var(--muted)">{unit}</text>
-      <text x={2} y={cy + 8} fontSize={9} fill="var(--muted)">0</text>
-      <text x={W - 2} y={cy + 8} textAnchor="end" fontSize={9} fill="var(--muted)">{max}</text>
+      <line x1={cx} y1={cy} x2={nx} y2={ny} stroke={color} strokeWidth={2.5} strokeLinecap="round" />
+      <circle cx={cx} cy={cy} r={5} fill={color} />
+      <text x={cx} y={cy + 34} textAnchor="middle" fontSize={value >= 10000 ? 17 : 22} fontWeight={800} fill="var(--ink)" className="tnum">{nfmt(value)}</text>
+      <text x={cx} y={cy + 49} textAnchor="middle" fontSize={10} fill="var(--muted)">{unit}</text>
     </svg>
   );
 }
@@ -54,55 +62,43 @@ function Donut({ segs, center, sub }: { segs: { value: number; color: string }[]
   );
 }
 
-// --- leakage mini-map (normalized scatter over WB bounds) ------------------
-function LeakScatter({ leaks }: { leaks: CommandCenterData['leaks'] }) {
-  const LAT0 = 21.9, LAT1 = 24.2, LNG0 = 87.4, LNG1 = 89.0;
-  const W = 260, H = 150;
-  const x = (lng: number) => ((lng - LNG0) / (LNG1 - LNG0)) * W;
-  const y = (lat: number) => H - ((lat - LAT0) / (LAT1 - LAT0)) * H;
-  return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="cc-leakmap" preserveAspectRatio="xMidYMid meet">
-      <rect x={0} y={0} width={W} height={H} fill="var(--surface2)" rx={8} />
-      {Array.from({ length: 7 }, (_, i) => <line key={`v${i}`} x1={(i + 1) * W / 8} y1={0} x2={(i + 1) * W / 8} y2={H} stroke="var(--line)" strokeWidth={0.5} />)}
-      {Array.from({ length: 4 }, (_, i) => <line key={`h${i}`} x1={0} y1={(i + 1) * H / 5} x2={W} y2={(i + 1) * H / 5} stroke="var(--line)" strokeWidth={0.5} />)}
-      {leaks.map((p, i) => (
-        <g key={i}>
-          <circle cx={x(p.lng)} cy={y(p.lat)} r={p.severity === 'High' ? 9 : 6} fill={p.severity === 'High' ? 'var(--alarm)' : 'var(--watch)'} opacity={0.25} />
-          <circle cx={x(p.lng)} cy={y(p.lat)} r={3} fill={p.severity === 'High' ? 'var(--alarm)' : 'var(--watch)'} />
-        </g>
-      ))}
-    </svg>
-  );
-}
-
-// --- center Leaflet map (dark) --------------------------------------------
-function CenterMap() {
+// --- shared interactive Leaflet map (dark) --------------------------------
+type Marker = { lat: number; lng: number; color: string; label?: string };
+function LeafMap({ markers, height, fit }: { markers: Marker[]; height: number; fit?: boolean }) {
   const elRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
+  const layerRef = useRef<L.LayerGroup | null>(null);
+
   useEffect(() => {
     if (mapRef.current || !elRef.current) return;
-    const map = L.map(elRef.current, { center: [23.4, 88.4], zoom: 8, zoomControl: false, attributionControl: false, scrollWheelZoom: false });
-    // Key-free OSM tiles; darkened via a CSS filter on .cc-map (see styles.css).
+    const map = L.map(elRef.current, { center: [23.4, 88.4], zoom: 8, attributionControl: false });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+    layerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
-    const layer = L.layerGroup().addTo(map);
-    api.mapPoints().then((d) => {
-      const pts: [number, number][] = [];
-      for (const s of d.sites) {
-        const lat = Number(s.latitude), lng = Number(s.longitude);
-        pts.push([lat, lng]);
-        L.circleMarker([lat, lng], { radius: 3, color: s.fault > 0 ? '#e0533d' : '#22d3ee', weight: 1, fillOpacity: 0.85 }).addTo(layer);
-      }
-      if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.15));
-    }).catch(() => {});
     setTimeout(() => map.invalidateSize(), 120);
     return () => { map.remove(); mapRef.current = null; };
   }, []);
-  return <div ref={elRef} className="cc-map" />;
+
+  useEffect(() => {
+    const map = mapRef.current, layer = layerRef.current;
+    if (!map || !layer) return;
+    layer.clearLayers();
+    const pts: [number, number][] = [];
+    for (const m of markers) {
+      pts.push([m.lat, m.lng]);
+      const cm = L.circleMarker([m.lat, m.lng], { radius: 5, color: '#fff', weight: 1, fillColor: m.color, fillOpacity: 0.9 });
+      if (m.label) cm.bindPopup(m.label);
+      cm.addTo(layer);
+    }
+    if (fit && pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.2));
+  }, [markers, fit]);
+
+  return <div ref={elRef} className="cc-leaflet" style={{ height }} />;
 }
 
 export function CommandCenter() {
   const [d, setD] = useState<CommandCenterData | null>(null);
+  const [sites, setSites] = useState<Marker[]>([]);
   const [err, setErr] = useState('');
   const [supplyMode, setSupplyMode] = useState<'Supply' | 'Waste'>('Supply');
 
@@ -112,13 +108,16 @@ export function CommandCenter() {
     const t = setInterval(load, 20000);
     return () => clearInterval(t);
   }, []);
+  useEffect(() => {
+    api.mapPoints().then((m) => setSites(m.sites.map((s) => ({ lat: Number(s.latitude), lng: Number(s.longitude), color: s.fault > 0 ? '#e0533d' : '#22d3ee', label: `${s.name}` })))).catch(() => {});
+  }, []);
+
+  const leakMarkers = useMemo<Marker[]>(() => (d?.leaks ?? []).map((l) => ({ lat: l.lat, lng: l.lng, color: l.severity === 'High' ? CSS('--alarm') : CSS('--watch'), label: `${l.severity} leak risk` })), [d]);
 
   const pc = d?.pipeCondition;
   const condSegs = pc ? [
-    { value: pc.good, color: CSS('--ok') },
-    { value: pc.fair, color: CSS('--watch') },
-    { value: pc.poor, color: '#e08a3d' },
-    { value: pc.critical, color: CSS('--alarm') },
+    { value: pc.good, color: CSS('--ok') }, { value: pc.fair, color: CSS('--watch') },
+    { value: pc.poor, color: '#e08a3d' }, { value: pc.critical, color: CSS('--alarm') },
   ] : [];
 
   const tiles = d ? [
@@ -150,8 +149,8 @@ export function CommandCenter() {
           <div className="panel">
             <div className="ccp-h">System Pressure &amp; Flow</div>
             <div className="cc-gauges">
-              <ArcGauge value={d?.pressure.psi ?? 0} max={150} label="Pressure" unit="PSI" color={CSS('--accent')} />
-              <ArcGauge value={d?.pressure.gpm ?? 0} max={100000} label="Flow" unit="GPM" color={CSS('--ok')} />
+              <AnalogGauge value={d?.pressure.psi ?? 0} max={120} majors={6} unit="PSI" color={CSS('--accent')} />
+              <AnalogGauge value={d?.pressure.gpm ?? 0} max={100000} majors={5} unit="GPM" color={CSS('--ok')} />
             </div>
           </div>
 
@@ -175,8 +174,8 @@ export function CommandCenter() {
 
           <div className="panel">
             <div className="ccp-h">Leakage Detection</div>
-            {d ? <LeakScatter leaks={d.leaks} /> : <p className="muted">Loading…</p>}
-            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{d?.leaks.length ?? 0} active leak alerts</div>
+            <LeafMap markers={leakMarkers} height={170} fit />
+            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{leakMarkers.length} active leak alerts</div>
           </div>
         </div>
 
@@ -197,7 +196,7 @@ export function CommandCenter() {
                 </div>
               ))}
             </div>
-            <CenterMap />
+            <LeafMap markers={sites} height={420} fit />
           </div>
 
           <div className="panel">

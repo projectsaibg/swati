@@ -587,6 +587,29 @@ async function main() {
   await prisma.workOrder.createMany({ data: woRows });
   console.log(`Seeded ${woRows.length} work orders (${faultedPumps.length} corrective).`);
 
+  // Billing & Revenue: per site per month (6 months) with an improving
+  // collection-efficiency trend and per-site variation; arrears carry forward.
+  await prisma.billingRecord.deleteMany({});
+  const brRows: any[] = [];
+  const billSites = await prisma.site.findMany({ where: { kind: 'PUMP_STATION' }, select: { id: true, name: true, district: true, block: true, zone: true, code: true } });
+  for (const s of billSites) {
+    const seed = hash(s.code ?? s.id);
+    const connections = 200 + (seed % 900); // 200..1099
+    const monthlyCharge = 180 + (seed % 60); // INR per connection per month
+    let arrears = (seed % 5000) + 2000; // opening arrears
+    for (let i = 0; i < nrwPeriods.length; i++) {
+      const t = i / (nrwPeriods.length - 1);
+      const eff = Math.max(0.5, Math.min(0.98, 0.70 + 0.20 * t + ((seed % 10) - 5) / 100));
+      const demand = Math.round(connections * monthlyCharge);
+      const collected = Math.round(demand * eff);
+      arrears = Math.max(0, arrears + (demand - collected) - Math.round(arrears * 0.1));
+      const billedKl = Math.round(connections * (12 + (seed % 8)));
+      brRows.push({ siteId: s.id, siteName: s.name, district: s.district, block: s.block, zone: s.zone, period: nrwPeriods[i], connections, demandInr: demand, collectedInr: collected, arrearsInr: arrears, billedKl });
+    }
+  }
+  for (let i = 0; i < brRows.length; i += 5000) await prisma.billingRecord.createMany({ data: brRows.slice(i, i + 5000) });
+  console.log(`Seeded ${brRows.length} billing records.`);
+
   console.log('Seed complete.');
   console.log(`Admin login: ${adminEmail}`);
   console.log(`Admin password (shown once): ${adminPassword}`);

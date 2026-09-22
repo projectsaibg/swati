@@ -209,6 +209,10 @@ export const api = {
   updateWorkOrder: (id: string, dto: { status?: string; priority?: string; assignee?: string; notes?: string }) =>
     http.patch(`/maintenance/orders/${id}`, dto).then((r) => r.data as WorkOrder[]),
 
+  // Billing & Revenue
+  billingSummary: (f?: GeoQuery) => http.get('/billing/summary', { params: f }).then((r) => r.data as BillingSummary),
+  billingAccounts: (f?: GeoQuery) => http.get('/billing/accounts', { params: f }).then((r) => r.data as BillingAccount[]),
+
   // Field Verification
   fieldVerifications: () => http.get('/field-verification').then((r) => r.data as FieldVerificationRow[]),
   createFieldVerification: (form: FormData) =>
@@ -291,6 +295,18 @@ export interface WorkOrder {
 export interface MaintenanceSummary {
   total: number; open: number; inProgress: number; done: number;
   overdue: number; preventive: number; corrective: number; highPriority: number;
+}
+
+export interface BillingSummary {
+  period: string | null;
+  demandInr: number; collectedInr: number; arrearsInr: number;
+  connections: number; billedKl: number; collectionEfficiency: number;
+  trend: { label: string; value: number }[];
+  worst: { name: string; arrearsInr: number } | null;
+}
+export interface BillingAccount {
+  siteName: string | null; district: string | null; block: string | null; zone: string | null;
+  connections: number; demandInr: number; collectedInr: number; arrearsInr: number; efficiency: number;
 }
 
 export interface NrwSummary {

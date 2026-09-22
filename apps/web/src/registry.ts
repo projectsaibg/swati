@@ -9,6 +9,7 @@ export interface NavItem {
 
 export const NAV: NavItem[] = [
   { key: 'executive_overview', label: 'Executive Overview', path: '/', group: 'Overview' },
+  { key: 'command_center', label: 'Command Center', path: '/command-center', group: 'Overview' },
   { key: 'interactive_map', label: 'Interactive Map', path: '/map', group: 'Overview' },
   { key: 'instrumentation', label: 'Field Instruments', path: '/instruments', group: 'Assets' },
   { key: 'condition_monitoring', label: 'Pump & Motor', path: '/condition', group: 'Assets' },
@@ -35,6 +36,7 @@ export const NAV: NavItem[] = [
 // icon -> key in icons.tsx; accent -> modcard color class; badge optional.
 export interface ModuleMeta { icon: string; desc: string; accent: string; badge?: string }
 export const MODULE_META: Record<string, ModuleMeta> = {
+  command_center: { icon: 'cpu', desc: 'Unified water-distribution command center — pressure, flow, quality and assets.', accent: 'cyan', badge: 'LIVE' },
   interactive_map: { icon: 'map', desc: 'Live geospatial view of every asset and IoT device.', accent: 'cyan', badge: 'LIVE' },
   action_center: { icon: 'alert', desc: 'Triage and acknowledge open operational alerts.', accent: 'red' },
   condition_monitoring: { icon: 'activity', desc: 'Pump & motor ESA health and signal analysis.', accent: 'teal', badge: 'LIVE' },

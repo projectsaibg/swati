@@ -13,6 +13,7 @@ import { NRWExplorer } from './NRWExplorer';
 import { LeakDetection } from './LeakDetection';
 import { Maintenance } from './Maintenance';
 import { Billing } from './Billing';
+import { Instruments } from './Instruments';
 import { Admin } from './Admin';
 import { NAV } from './registry';
 import { ReactNode } from 'react';
@@ -30,6 +31,7 @@ const PAGE_COMPONENTS: Record<string, ReactNode> = {
   leak_detection: <LeakDetection />,
   maintenance: <Maintenance />,
   billing: <Billing />,
+  instrumentation: <Instruments />,
 };
 
 function AppRoutes() {

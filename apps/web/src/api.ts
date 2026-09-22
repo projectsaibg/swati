@@ -213,6 +213,10 @@ export const api = {
   billingSummary: (f?: GeoQuery) => http.get('/billing/summary', { params: f }).then((r) => r.data as BillingSummary),
   billingAccounts: (f?: GeoQuery) => http.get('/billing/accounts', { params: f }).then((r) => r.data as BillingAccount[]),
 
+  // Field Instruments
+  instrumentSummary: (f?: GeoQuery) => http.get('/instruments/summary', { params: f }).then((r) => r.data as InstrumentSummary),
+  instrumentList: (f?: GeoQuery & { type?: string }) => http.get('/instruments/list', { params: f }).then((r) => r.data as Instrument[]),
+
   // Field Verification
   fieldVerifications: () => http.get('/field-verification').then((r) => r.data as FieldVerificationRow[]),
   createFieldVerification: (form: FormData) =>
@@ -307,6 +311,16 @@ export interface BillingSummary {
 export interface BillingAccount {
   siteName: string | null; district: string | null; block: string | null; zone: string | null;
   connections: number; demandInr: number; collectedInr: number; arrearsInr: number; efficiency: number;
+}
+
+export interface Instrument {
+  id: string; tag: string; name: string; type: string; typeLabel: string;
+  siteName: string | null; district: string | null; block: string | null; zone: string | null;
+  transport: string | null; lastSeen: string | null; online: boolean;
+  value: number | null; unit: string; metric: string | null; ts: string | null;
+}
+export interface InstrumentSummary {
+  total: number; byType: Record<string, number>; online: number; offline: number;
 }
 
 export interface NrwSummary {

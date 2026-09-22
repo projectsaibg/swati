@@ -10,6 +10,7 @@ export interface NavItem {
 export const NAV: NavItem[] = [
   { key: 'executive_overview', label: 'Executive Overview', path: '/', group: 'Overview' },
   { key: 'interactive_map', label: 'Interactive Map', path: '/map', group: 'Overview' },
+  { key: 'instrumentation', label: 'Field Instruments', path: '/instruments', group: 'Assets' },
   { key: 'condition_monitoring', label: 'Pump & Motor', path: '/condition', group: 'Assets' },
   { key: 'pump_stations', label: 'Pump Stations', path: '/pump-stations', group: 'Assets' },
   { key: 'valve_control', label: 'Valve Control', path: '/valves', group: 'Assets' },
@@ -37,6 +38,7 @@ export const MODULE_META: Record<string, ModuleMeta> = {
   interactive_map: { icon: 'map', desc: 'Live geospatial view of every asset and IoT device.', accent: 'cyan', badge: 'LIVE' },
   action_center: { icon: 'alert', desc: 'Triage and acknowledge open operational alerts.', accent: 'red' },
   condition_monitoring: { icon: 'activity', desc: 'Pump & motor ESA health and signal analysis.', accent: 'teal', badge: 'LIVE' },
+  instrumentation: { icon: 'cpu', desc: 'Flow, level, pressure, chlorine and water-quality instruments.', accent: 'cyan', badge: 'LIVE' },
   pump_stations: { icon: 'sliders', desc: 'Pump houses: duty rotation, flow, pressure and energy.', accent: 'cyan', badge: 'LIVE' },
   network_analysis: { icon: 'network', desc: 'Distribution network topology and flow analysis.', accent: 'cyan' },
   valve_control: { icon: 'sliders', desc: 'Remote valve operations and health monitoring.', accent: 'teal' },

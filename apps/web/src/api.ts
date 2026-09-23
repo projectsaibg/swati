@@ -365,7 +365,7 @@ export interface CommandCenterData {
   plantStation: { label: string; production: number; leakage: number; wamr: number; ami: number }[];
   maintenance: { code: string; title: string; site: string | null; priority: string; due: string | null }[];
   waterMainBreaks: { label: string; breaks: number; prev: number }[];
-  pumpStatus: { name: string; cells: number[] }[];
+  pumpStatus: { name: string; district: string; cells: number[] }[];
   leaks: { lat: number; lng: number; severity: string }[];
   updatedAt: string;
 }

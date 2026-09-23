@@ -15,7 +15,7 @@ import { PUMP_HOUSES } from '../data/pumphouses';
 const prisma = new PrismaClient();
 
 async function main() {
-  const TIER: TierName = 'VECTOR';
+  const TIER: TierName = 'QUANTUM';
 
   // Deployment
   let deployment = await prisma.deployment.findFirst();

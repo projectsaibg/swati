@@ -16,6 +16,7 @@ import { Billing } from './Billing';
 import { Instruments } from './Instruments';
 import { CommandCenter } from './CommandCenter';
 import { Accountability } from './Accountability';
+import { Preventive } from './Preventive';
 import { Admin } from './Admin';
 import { NAV } from './registry';
 import { ReactNode } from 'react';
@@ -36,6 +37,7 @@ const PAGE_COMPONENTS: Record<string, ReactNode> = {
   instrumentation: <Instruments />,
   command_center: <CommandCenter />,
   accountability: <Accountability />,
+  predictive: <Preventive />,
 };
 
 function AppRoutes() {

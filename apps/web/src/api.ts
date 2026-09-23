@@ -217,6 +217,10 @@ export const api = {
   accountabilitySummary: (f?: GeoQuery) => http.get('/accountability/summary', { params: f }).then((r) => r.data as AccountabilitySummary),
   accountabilityScorecard: (f?: GeoQuery) => http.get('/accountability/scorecard', { params: f }).then((r) => r.data as AccountabilityRow[]),
 
+  // Preventive (AI forecasting)
+  preventiveSummary: (f?: GeoQuery) => http.get('/preventive/summary', { params: f }).then((r) => r.data as PreventiveSummary),
+  preventiveForecasts: (f?: GeoQuery & { type?: string }) => http.get('/preventive/forecasts', { params: f }).then((r) => r.data as PreventiveForecast[]),
+
   // Command Center
   commandCenter: () => http.get('/command-center/summary').then((r) => r.data as CommandCenterData),
 
@@ -329,6 +333,17 @@ export interface AccountabilitySummary {
   sites: number; totalInputKl: number; totalBilledKl: number; waterLossKl: number;
   avgNrwPct: number; avgCollectionEff: number; totalRevenueInr: number; totalConnections: number;
   avgScore: number; grades: Record<string, number>;
+}
+
+export interface PreventiveForecast {
+  assetTag: string; name: string; type: string; typeLabel: string;
+  site: string | null; district: string | null; block: string | null; zone: string | null;
+  ageMonths: number; riskPct: number; action: string;
+  dueInDays: number; urgency: string; priority: string; confidence: number; estCostInr: number;
+}
+export interface PreventiveSummary {
+  total: number; overdue: number; due30: number; due90: number; scheduled: number;
+  predictedFailures30: number; estCostAvoidedInr: number; avgConfidence: number; byType: Record<string, number>;
 }
 
 export interface Instrument {

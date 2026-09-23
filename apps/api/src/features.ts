@@ -38,7 +38,7 @@ export const FEATURE_REGISTRY: FeatureDef[] = [
   { key: 'condition_monitoring', module: 'Pump/Motor ESA', tier: 'VELOCITY', visibility: 'PUBLIC' },
   { key: 'pump_stations', module: 'Pump Stations', tier: 'VECTOR', visibility: 'PUBLIC' },
   { key: 'instrumentation', module: 'Field Instruments', tier: 'VECTOR', visibility: 'PUBLIC' },
-  { key: 'predictive', module: 'Predictive Analysis', tier: 'QUANTUM', visibility: 'LOGIN' },
+  { key: 'predictive', module: 'Preventive', tier: 'QUANTUM', visibility: 'PUBLIC' },
   { key: 'chatbot', module: 'AI Assistant', tier: 'QUANTUM', visibility: 'LOGIN' },
   { key: 'digital_twin', module: 'Digital Twin', tier: 'QUANTUM', visibility: 'PUBLIC' },
 ];

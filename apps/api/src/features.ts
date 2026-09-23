@@ -25,7 +25,7 @@ export const FEATURE_REGISTRY: FeatureDef[] = [
   { key: 'action_center', module: 'Action Center', tier: 'BASE', visibility: 'LOGIN' },
   { key: 'network_analysis', module: 'Network Analysis', tier: 'BASE', visibility: 'LOGIN' },
   { key: 'communication', module: 'Communication', tier: 'BASE', visibility: 'LOGIN' },
-  { key: 'accountability', module: 'Accountability', tier: 'BASE', visibility: 'LOGIN' },
+  { key: 'accountability', module: 'Accountability', tier: 'BASE', visibility: 'PUBLIC' },
   { key: 'field_verification', module: 'Field Verification', tier: 'BASE', visibility: 'LOGIN' },
   { key: 'reports', module: 'Reports', tier: 'BASE', visibility: 'LOGIN' },
   { key: 'key_personnel', module: 'Key Personnel', tier: 'BASE', visibility: 'LOGIN' },

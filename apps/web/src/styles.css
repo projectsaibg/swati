@@ -207,6 +207,16 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .cc-cell { flex: 1; height: 14px; border-radius: 3px; background: var(--surface2); }
 .cc-cell.on { background: var(--ok); }
 
+/* Accountability */
+.acct-balance { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+.acct-bar { height: 18px; border-radius: 6px; background: var(--alarm); overflow: hidden; }
+.acct-bar-billed { height: 100%; background: var(--ok); }
+.acct-grades { min-width: 220px; }
+.acct-grade-row { display: flex; gap: 12px; }
+.acct-grade { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.acct-grade-n { font-size: 22px; font-weight: 800; }
+.acct-grade-g { width: 26px; height: 26px; border-radius: 7px; color: #061018; font-weight: 800; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+
 @media (max-width: 1180px) { .cc-grid { grid-template-columns: 1fr; } .cc-assettiles { grid-template-columns: repeat(3, 1fr); } .cc-pumpcols { grid-template-columns: 1fr; } }
 
 .modgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }

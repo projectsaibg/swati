@@ -20,6 +20,7 @@ import { MaintenanceModule } from './maintenance';
 import { BillingModule } from './billing';
 import { InstrumentsModule } from './instruments';
 import { CommandCenterModule } from './commandcenter';
+import { AccountabilityModule } from './accountability';
 import { DemoSimulator } from './simulate';
 import { FeatureGuard, HttpExceptionFilter, JwtAuthGuard, PermissionsGuard } from './common';
 import { Public } from './decorators';
@@ -55,6 +56,7 @@ export class HealthController {
     BillingModule,
     InstrumentsModule,
     CommandCenterModule,
+    AccountabilityModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -104,7 +104,7 @@ export class CommandCenterService {
     // --- active maintenance (open work orders) ----------------------------
     const woRows = await this.prisma.workOrder.findMany({
       where: { status: { in: ['OPEN', 'IN_PROGRESS'] } },
-      orderBy: [{ priority: 'asc' }, { dueAt: 'asc' }], take: 8,
+      orderBy: [{ priority: 'asc' }, { dueAt: 'asc' }], take: 20,
       select: { code: true, title: true, siteName: true, priority: true, dueAt: true },
     });
     const maintenance = woRows.map((w) => ({

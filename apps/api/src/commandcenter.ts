@@ -118,17 +118,21 @@ export class CommandCenterService {
       return { label: new Date(now - (10 - i) * 3 * 86400000).toLocaleDateString([], { month: '2-digit', day: '2-digit' }), breaks: 20 + (seed % 170), prev: 20 + ((seed >> 3) % 150) };
     });
 
-    // --- pump-station status timeline -------------------------------------
-    const stations = await this.prisma.site.findMany({
-      where: { kind: 'PUMP_STATION' }, orderBy: { name: 'asc' }, take: 6,
-      select: { name: true, code: true, assets: { where: { type: 'MOTOR_PUMP' }, select: { status: true } } },
+    // --- pump-station status timeline, sampled per district ---------------
+    const stationsAll = await this.prisma.site.findMany({
+      where: { kind: 'PUMP_STATION' }, orderBy: { name: 'asc' },
+      select: { name: true, code: true, district: true, assets: { where: { type: 'MOTOR_PUMP' }, select: { status: true } } },
     });
-    const pumpStatus = stations.map((s) => {
-      const seed = hash(s.code ?? s.name);
-      const faulted = s.assets.some((a) => a.status === 'FAULT');
-      const cells = Array.from({ length: 14 }, (_, i) => (faulted && i > 9 ? 0 : (((seed >> i) & 1) || i % 3 !== 0 ? 1 : 0)));
-      return { name: s.name.split(' — ')[0].slice(0, 22), cells };
-    });
+    const pumpStatus: { name: string; district: string; cells: number[] }[] = [];
+    for (const dist of ['Nadia', 'Purba Medinipur']) {
+      const inDist = stationsAll.filter((s) => s.district === dist).slice(0, 8);
+      for (const s of inDist) {
+        const seed = hash(s.code ?? s.name);
+        const faulted = s.assets.some((a) => a.status === 'FAULT');
+        const cells = Array.from({ length: 16 }, (_, i) => (faulted && i > 11 ? 0 : (((seed >> i) & 1) || i % 3 !== 0 ? 1 : 0)));
+        pumpStatus.push({ name: s.name.split(' — ')[0].slice(0, 26), district: dist, cells });
+      }
+    }
 
     // --- leak points for the mini map -------------------------------------
     const leakSites = await this.prisma.site.findMany({

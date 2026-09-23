@@ -296,19 +296,28 @@ export function CommandCenter() {
             </div>
           </div>
 
-          <div className="panel">
-            <div className="ccp-h">Pump Station Status</div>
-            <div className="cc-pumpgrid">
-              {d?.pumpStatus.map((r) => (
-                <div className="cc-pumprow" key={r.name}>
-                  <span className="cc-pumpname">{r.name}</span>
-                  <div className="cc-cells">
-                    {r.cells.map((c, i) => <span key={i} className={`cc-cell ${c ? 'on' : ''}`} />)}
+        </div>
+      </div>
+
+      {/* Full-width Pump Station Status, split by district */}
+      <div className="panel">
+        <div className="ccp-h">Pump Station Status</div>
+        <div className="cc-pumpcols">
+          {['Nadia', 'Purba Medinipur'].map((dist) => (
+            <div className="cc-pumpcol" key={dist}>
+              <div className="cc-pumpcol-h">{dist} <span className="muted">· {d?.pumpStatus.filter((r) => r.district === dist).length ?? 0} stations</span></div>
+              <div className="cc-pumpgrid">
+                {d?.pumpStatus.filter((r) => r.district === dist).map((r) => (
+                  <div className="cc-pumprow" key={dist + r.name}>
+                    <span className="cc-pumpname">{r.name}</span>
+                    <div className="cc-cells">
+                      {r.cells.map((c, i) => <span key={i} className={`cc-cell ${c ? 'on' : ''}`} />)}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          ))}
         </div>
       </div>
     </div>

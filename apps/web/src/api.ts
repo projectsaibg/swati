@@ -213,6 +213,10 @@ export const api = {
   billingSummary: (f?: GeoQuery) => http.get('/billing/summary', { params: f }).then((r) => r.data as BillingSummary),
   billingAccounts: (f?: GeoQuery) => http.get('/billing/accounts', { params: f }).then((r) => r.data as BillingAccount[]),
 
+  // Accountability
+  accountabilitySummary: (f?: GeoQuery) => http.get('/accountability/summary', { params: f }).then((r) => r.data as AccountabilitySummary),
+  accountabilityScorecard: (f?: GeoQuery) => http.get('/accountability/scorecard', { params: f }).then((r) => r.data as AccountabilityRow[]),
+
   // Command Center
   commandCenter: () => http.get('/command-center/summary').then((r) => r.data as CommandCenterData),
 
@@ -314,6 +318,17 @@ export interface BillingSummary {
 export interface BillingAccount {
   siteName: string | null; district: string | null; block: string | null; zone: string | null;
   connections: number; demandInr: number; collectedInr: number; arrearsInr: number; efficiency: number;
+}
+
+export interface AccountabilityRow {
+  siteName: string | null; district: string | null; block: string | null; zone: string | null;
+  connections: number; inputKl: number; billedKl: number; nrwPct: number;
+  collectionEff: number; revenueInr: number; score: number; grade: string;
+}
+export interface AccountabilitySummary {
+  sites: number; totalInputKl: number; totalBilledKl: number; waterLossKl: number;
+  avgNrwPct: number; avgCollectionEff: number; totalRevenueInr: number; totalConnections: number;
+  avgScore: number; grades: Record<string, number>;
 }
 
 export interface Instrument {

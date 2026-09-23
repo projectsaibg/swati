@@ -97,7 +97,8 @@ export class CommandCenterService {
     for (let i = 6; i >= 0; i--) days.push(new Date(now - i * 86400000).toLocaleDateString([], { month: '2-digit', day: '2-digit' }));
     const plantStation = days.map((label, i) => {
       const seed = hash(label + i);
-      return { label, production: 250 + (seed % 90), leakage: 18 + (seed % 10), wamr: 40 + (seed % 45), ami: 30 + (seed % 55) };
+      // production/wamr/ami as MGD-scale bars (left axis); leakage as % (right axis).
+      return { label, production: 250 + (seed % 90), leakage: 12 + (seed % 11), wamr: 150 + (seed % 110), ami: 120 + (seed % 120) };
     });
 
     // --- active maintenance (open work orders) ----------------------------

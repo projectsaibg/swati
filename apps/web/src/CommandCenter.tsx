@@ -62,6 +62,55 @@ function Donut({ segs, center, sub }: { segs: { value: number; color: string }[]
   );
 }
 
+// --- plant & station: grouped bars + leakage line (dual axis) -------------
+function PlantStationChart({ data }: { data: CommandCenterData['plantStation'] }) {
+  const W = 340, H = 176, padL = 28, padR = 28, padT = 12, padB = 22;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const series: { key: 'production' | 'wamr' | 'ami'; color: string }[] = [
+    { key: 'production', color: '#e6a52b' },
+    { key: 'wamr', color: '#e0559b' },
+    { key: 'ami', color: '#22d3ee' },
+  ];
+  const leftMax = Math.max(1, Math.ceil(Math.max(...data.flatMap((d) => [d.production, d.wamr, d.ami])) / 100) * 100);
+  const rightMax = Math.max(6, Math.ceil(Math.max(...data.map((d) => d.leakage)) / 6) * 6);
+  const n = data.length || 1;
+  const gw = plotW / n;
+  const bw = Math.max(4, Math.min(9, (gw - 8) / 3));
+  const yL = (v: number) => padT + plotH - (v / leftMax) * plotH;
+  const yR = (v: number) => padT + plotH - (v / rightMax) * plotH;
+  const gx = (i: number) => padL + i * gw;
+  const line = data.map((d, i) => `${gx(i) + gw / 2},${yR(d.leakage)}`).join(' ');
+  const ticks = [0, 0.25, 0.5, 0.75, 1];
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Plant and station production and leakage">
+      {ticks.map((t, i) => {
+        const y = padT + plotH - t * plotH;
+        return (
+          <g key={i}>
+            <line x1={padL} y1={y} x2={W - padR} y2={y} stroke="var(--line)" strokeWidth={0.5} />
+            <text x={padL - 4} y={y + 3} textAnchor="end" fontSize={8} fill="var(--muted)">{Math.round(t * leftMax)}</text>
+            <text x={W - padR + 4} y={y + 3} textAnchor="start" fontSize={8} fill="var(--muted)">{Math.round(t * rightMax)}</text>
+          </g>
+        );
+      })}
+      {data.map((d, i) => (
+        <g key={i}>
+          {series.map((s, j) => {
+            const x = gx(i) + (gw - bw * 3 - 4) / 2 + j * (bw + 2);
+            const y = yL(d[s.key]);
+            return <rect key={j} x={x} y={y} width={bw} height={Math.max(0, padT + plotH - y)} fill={s.color} rx={1} />;
+          })}
+          <text x={gx(i) + gw / 2} y={H - 7} textAnchor="middle" fontSize={8} fill="var(--muted)">{d.label}</text>
+        </g>
+      ))}
+      <polyline points={line} fill="none" stroke="#f5d020" strokeWidth={2} />
+      {data.map((d, i) => <circle key={i} cx={gx(i) + gw / 2} cy={yR(d.leakage)} r={2.5} fill="#f5d020" />)}
+      <text x={padL - 4} y={padT - 3} textAnchor="end" fontSize={8} fill="var(--muted)">MGD</text>
+      <text x={W - padR + 4} y={padT - 3} textAnchor="start" fontSize={8} fill="var(--muted)">%</text>
+    </svg>
+  );
+}
+
 // --- shared interactive Leaflet map (dark) --------------------------------
 type Marker = { lat: number; lng: number; color: string; label?: string };
 function LeafMap({ markers, height, fit }: { markers: Marker[]; height: number; fit?: boolean }) {
@@ -218,12 +267,17 @@ export function CommandCenter() {
           </div>
 
           <div className="panel">
-            <div className="ccp-h">Plant and Station <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>· 7 days</span></div>
-            {d ? <AxisChart data={d.plantStation.map((p) => ({ label: p.label, value: p.production }))} color={CSS('--watch')} name="Total production" unit="MGD" type="bar" height={130} /> : <p className="muted">Loading…</p>}
-            <div className="cc-legend row" style={{ marginTop: 6 }}>
-              <div><span className="dot" style={{ background: 'var(--watch)' }} /> Production</div>
-              <div><span className="dot" style={{ background: 'var(--alarm)' }} /> Avg leakage <b>{d ? Math.round(d.plantStation.reduce((a, p) => a + p.leakage, 0) / d.plantStation.length) : 0}%</b></div>
+            <div className="ccp-h" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Plant and Station</span>
+              {d && d.plantStation.length ? <span className="cc-daterange">{d.plantStation[0].label} — {d.plantStation[d.plantStation.length - 1].label}</span> : null}
             </div>
+            <div className="cc-legend row" style={{ marginBottom: 6, fontSize: 11 }}>
+              <div><span className="dot" style={{ background: '#f5d020' }} /> Leakage</div>
+              <div><span className="dot" style={{ background: '#e6a52b' }} /> Total Plant Production</div>
+              <div><span className="dot" style={{ background: '#e0559b' }} /> WAMR</div>
+              <div><span className="dot" style={{ background: '#22d3ee' }} /> AMI</div>
+            </div>
+            {d ? <PlantStationChart data={d.plantStation} /> : <p className="muted">Loading…</p>}
           </div>
 
           <div className="panel">

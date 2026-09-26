@@ -221,6 +221,27 @@ export const api = {
   preventiveSummary: (f?: GeoQuery) => http.get('/preventive/summary', { params: f }).then((r) => r.data as PreventiveSummary),
   preventiveForecasts: (f?: GeoQuery & { type?: string }) => http.get('/preventive/forecasts', { params: f }).then((r) => r.data as PreventiveForecast[]),
 
+  // Sujalam Bharat integration layer
+  sujalamOverview: () => http.get('/sujalam/overview').then((r) => r.data as SujalamOverview),
+  sujalamFieldMappings: (system: string, entityType: string) =>
+    http.get('/sujalam/field-mappings', { params: { system, entityType } }).then((r) => r.data as FieldMappingRow[]),
+  sujalamValidationRules: (system: string, entityType: string) =>
+    http.get('/sujalam/validation-rules', { params: { system, entityType } }).then((r) => r.data as ValidationRuleRow[]),
+  sujalamMapPreview: (system: string, entityType: string, id?: string) =>
+    http.get('/sujalam/map-preview', { params: { system, entityType, id } }).then((r) => r.data as MapPreview),
+  sujalamValidationReport: (system: string, entityType: string) =>
+    http.get('/sujalam/validation-report', { params: { system, entityType } }).then((r) => r.data as ValidationReport),
+  sujalamGis: () => http.get('/sujalam/gis').then((r) => r.data as SujalamGis),
+  sujalamSyncJobs: () => http.get('/sujalam/sync/jobs').then((r) => r.data as SyncJobs),
+  sujalamConflicts: () => http.get('/sujalam/conflicts').then((r) => r.data as ConflictRow[]),
+  sujalamPush: (system: string, entityType: string) =>
+    http.post('/sujalam/sync/push', { system, entityType }).then((r) => r.data as SyncResult),
+  sujalamPull: (system: string, entityType: string) =>
+    http.post('/sujalam/sync/pull', { system, entityType }).then((r) => r.data as SyncResult),
+  sujalamImportJjm: () => http.post('/sujalam/import/jjm', {}).then((r) => r.data as ImportResult),
+  sujalamResolveConflict: (id: string, resolution: 'INTERNAL' | 'EXTERNAL') =>
+    http.post(`/sujalam/conflicts/${id}/resolve`, { resolution }).then((r) => r.data as { id: string; resolved: boolean; resolution: string }),
+
   // Command Center
   commandCenter: () => http.get('/command-center/summary').then((r) => r.data as CommandCenterData),
 
@@ -344,6 +365,75 @@ export interface PreventiveForecast {
 export interface PreventiveSummary {
   total: number; overdue: number; due30: number; due90: number; scheduled: number;
   predictedFailures30: number; estCostAvoidedInr: number; avgConfidence: number; byType: Record<string, number>;
+}
+
+export interface SujalamOverview {
+  schemes: { total: number; mapped: number; unmapped: number };
+  serviceAreas: { total: number };
+  sujalGaon: { total: number; mapped: number; unmapped: number };
+  infrastructure: { total: number; mapped: number; unmapped: number };
+  status: Record<string, number>;
+  readinessPct: number;
+  providers: { system: string; name: string; enabled: boolean; mockMode: boolean; supportsPush: boolean; supportsPull: boolean }[];
+  lastSync: { provider: string; direction: string; state: string; at: string } | null;
+  mock: boolean;
+  disclaimer: string;
+}
+
+export interface FieldMappingRow {
+  id: string; externalSystem: string; entityType: string;
+  internalField: string; externalField: string; transform: string;
+  transformArg: string | null; required: boolean; enabled: boolean; notes: string | null;
+}
+export interface ValidationRuleRow {
+  id: string; externalSystem: string | null; entityType: string;
+  field: string; ruleType: string; param: string | null; severity: string; message: string; enabled: boolean;
+}
+export interface MapPreview {
+  system: string; entityType: string; mappingCount: number;
+  entity: { id: string; label: string } | null;
+  internal: Record<string, unknown>; external: Record<string, unknown>;
+  missingRequired: string[]; mock: boolean; disclaimer: string;
+}
+export interface ValidationIssueRow {
+  id: string; label: string; valid: boolean; errors: number; warnings: number;
+  details: { field: string; ruleType: string; severity: string; message: string }[];
+}
+export interface ValidationReport {
+  system: string; entityType: string; ruleCount: number;
+  summary: { total: number; valid: number; invalid: number; withWarnings: number; readyForSync: number };
+  issues: ValidationIssueRow[]; mock: boolean; disclaimer: string;
+}
+export interface GisPoint { id: string; label: string; lat: number; lng: number; mapped: boolean }
+export interface GisBoundary { id: string; label: string; kind: 'SERVICE_AREA' | 'SUJAL_GAON'; geojson: unknown }
+export interface SujalamGis {
+  points: GisPoint[];
+  boundaries: GisBoundary[];
+  counts: {
+    assets: number; assetsGeolocated: number;
+    serviceAreas: number; serviceAreasWithBoundary: number;
+    villages: number; villagesWithBoundary: number;
+  };
+  mock: boolean; disclaimer: string;
+}
+export interface SyncResult {
+  jobId: string; direction: string; system: string; entityType: string; total: number;
+  success?: number; failed?: number; rejected?: number; matched?: number; conflicts?: number;
+  state: string; mock: boolean;
+}
+export interface ImportResult { batchId: string; total: number; created: number; linked: number; skipped: number; mock: boolean }
+export interface SyncJobRow {
+  id: string; provider: string; direction: string; entityType: string | null; state: string;
+  total: number; success: number; failed: number; rejected: number; startedAt: string; finishedAt: string | null;
+}
+export interface LegacyImportRow {
+  id: string; source: string; batchLabel: string; state: string; total: number;
+  created: number; linked: number; skipped: number; startedAt: string;
+}
+export interface SyncJobs { syncJobs: SyncJobRow[]; legacyImports: LegacyImportRow[] }
+export interface ConflictRow {
+  id: string; entityType: string; internalEntityId: string | null; externalEntityId: string | null;
+  label: string | null; field: string | null; internalValue: unknown; externalValue: unknown; ts: string;
 }
 
 export interface Instrument {

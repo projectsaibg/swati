@@ -566,3 +566,297 @@ model AppSetting {
   value     String?
   updatedAt DateTime @updatedAt
 }
+
+// =====================================================================
+// Sujalam Bharat / Government Integration Layer (additive, behind flags).
+// SWATI internal IDs are preserved; this layer only adds external mapping.
+// Supports bidirectional sync (push + pull) and multiple providers
+// (Sujalam Bharat + JJM 1.0 legacy import for retrofitted assets).
+// =====================================================================
+enum IntegrationSystem {
+  SUJALAM_BHARAT
+  JJM_1_0
+}
+
+enum MappingStatus {
+  NOT_MAPPED
+  IN_PROGRESS
+  VALIDATION_PENDING
+  READY_FOR_SYNC
+  SYNCED
+  SYNC_FAILED
+  CONFLICT
+  SUSPENDED
+}
+
+enum SyncDirection {
+  PUSH
+  PULL
+}
+
+enum SyncState {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  PARTIAL
+}
+
+model IntegrationProvider {
+  id            String            @id @default(cuid())
+  system        IntegrationSystem @unique
+  name          String
+  enabled       Boolean           @default(false)
+  mockMode      Boolean           @default(true)
+  supportsPush  Boolean           @default(false)
+  supportsPull  Boolean           @default(false)
+  autoSync      Boolean           @default(false)
+  gisValidation Boolean           @default(true)
+  baseUrl       String?
+  authType      String?
+  schemaVersion String?
+  config        Json?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+}
+
+model EntityMapping {
+  id                 String            @id @default(cuid())
+  entityType         String
+  internalEntityId   String
+  externalSystem     IntegrationSystem
+  externalEntityType String
+  externalEntityId   String?
+  mappingStatus      MappingStatus     @default(NOT_MAPPED)
+  verificationStatus String            @default("UNVERIFIED")
+  mappedBy           String?
+  mappedAt           DateTime?
+  lastSyncedAt       DateTime?
+  syncStatus         String?
+  externalVersion    String?
+  notes              String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([internalEntityId])
+  @@index([externalEntityId])
+  @@index([externalSystem, entityType])
+}
+
+model SchemeProfile {
+  id                 String        @id @default(cuid())
+  schemeKey          String        @unique
+  swatiSchemeId      String        @unique
+  sujalamBharatId    String?       @unique
+  schemeName         String
+  schemeType         String?
+  state              String        @default("West Bengal")
+  district           String?
+  block              String?
+  gramPanchayat      String?
+  status             String        @default("ACTIVE")
+  mappingStatus      MappingStatus @default(NOT_MAPPED)
+  verificationStatus String        @default("UNVERIFIED")
+  lastSyncedAt       DateTime?
+  externalVersion    String?
+  demo               Boolean       @default(true)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  serviceAreas       ServiceArea[]
+  sujalGaons         SujalGaon[]
+}
+
+model ServiceArea {
+  id                 String        @id @default(cuid())
+  serviceAreaId      String        @unique
+  schemeProfileId    String
+  scheme             SchemeProfile @relation(fields: [schemeProfileId], references: [id], onDelete: Cascade)
+  sujalamBharatId    String?
+  name               String
+  state              String        @default("West Bengal")
+  district           String?
+  block              String?
+  gramPanchayat      String?
+  population         Int?
+  households         Int?
+  fhtc               Int?
+  targetHouseholds   Int?
+  supplySource       String?
+  supplyMode         String?
+  supplyDurationHrs  Decimal?      @db.Decimal(4, 1)
+  supplyFrequency    String?
+  waterQualityStatus String?
+  serviceStatus      String?
+  gisBoundary        Json?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  sujalGaons         SujalGaon[]
+
+  @@index([schemeProfileId])
+}
+
+model SujalGaon {
+  id                 String         @id @default(cuid())
+  sujalGaonId        String?        @unique
+  swatiVillageId     String         @unique
+  serviceAreaId      String?
+  serviceArea        ServiceArea?   @relation(fields: [serviceAreaId], references: [id], onDelete: SetNull)
+  schemeProfileId    String?
+  scheme             SchemeProfile? @relation(fields: [schemeProfileId], references: [id], onDelete: SetNull)
+  sujalamBharatId    String?
+  name               String
+  state              String         @default("West Bengal")
+  district           String?
+  block              String?
+  gramPanchayat      String?
+  population         Int?
+  households         Int?
+  fhtc               Int?
+  supplyStatus       String?
+  supplyDurationHrs  Decimal?       @db.Decimal(4, 1)
+  waterQualityStatus String?
+  gisBoundary        Json?
+  mappingStatus      MappingStatus  @default(NOT_MAPPED)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@index([serviceAreaId])
+  @@index([schemeProfileId])
+}
+
+model InfrastructureMapping {
+  id               String        @id @default(cuid())
+  infrastructureId String        @unique
+  assetId          String?
+  assetTag         String?
+  category         String
+  schemeProfileId  String?
+  serviceAreaId    String?
+  sujalamBharatId  String?
+  externalInfraId  String?
+  latitude         Decimal?      @db.Decimal(10, 7)
+  longitude        Decimal?      @db.Decimal(10, 7)
+  mappingStatus    MappingStatus @default(NOT_MAPPED)
+  demo             Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([assetId])
+  @@index([schemeProfileId])
+}
+
+model SyncJob {
+  id          String            @id @default(cuid())
+  provider    IntegrationSystem
+  direction   SyncDirection
+  entityType  String?
+  state       SyncState         @default(PENDING)
+  total       Int               @default(0)
+  success     Int               @default(0)
+  failed      Int               @default(0)
+  rejected    Int               @default(0)
+  mock        Boolean           @default(true)
+  triggeredBy String?
+  notes       String?
+  startedAt   DateTime          @default(now())
+  finishedAt  DateTime?
+  records     SyncRecord[]
+
+  @@index([provider, startedAt])
+}
+
+model SyncRecord {
+  id               String        @id @default(cuid())
+  syncJobId        String
+  job              SyncJob       @relation(fields: [syncJobId], references: [id], onDelete: Cascade)
+  entityType       String
+  internalEntityId String?
+  externalEntityId String?
+  direction        SyncDirection
+  state            SyncState     @default(PENDING)
+  payloadVersion   String?
+  response         Json?
+  error            String?
+  retryCount       Int           @default(0)
+  ts               DateTime      @default(now())
+
+  @@index([syncJobId])
+}
+
+model GovAuditLog {
+  id             String             @id @default(cuid())
+  actor          String?
+  role           String?
+  entityType     String?
+  entityId       String?
+  action         String
+  oldValue       Json?
+  newValue       Json?
+  reason         String?
+  externalSystem IntegrationSystem?
+  syncJobId      String?
+  ip             String?
+  ts             DateTime           @default(now())
+
+  @@index([entityType, ts])
+}
+
+model LegacyImport {
+  id          String            @id @default(cuid())
+  source      IntegrationSystem @default(JJM_1_0)
+  batchLabel  String
+  entityType  String            @default("asset")
+  state       SyncState         @default(PENDING)
+  total       Int               @default(0)
+  created     Int               @default(0)
+  linked      Int               @default(0)
+  skipped     Int               @default(0)
+  triggeredBy String?
+  notes       String?
+  startedAt   DateTime          @default(now())
+  finishedAt  DateTime?
+}
+
+// Phase 2: declarative field/schema mapping. One row maps a single internal
+// SWATI field to a provider's external field, with an optional transform. The
+// mapping engine loads these per (externalSystem, entityType) to build the
+// external payload. Provider-agnostic so further systems slot in as rows.
+model FieldMapping {
+  id             String            @id @default(cuid())
+  externalSystem IntegrationSystem
+  entityType     String // SCHEME, SERVICE_AREA, SUJAL_GAON, INFRASTRUCTURE
+  internalField  String
+  externalField  String
+  transform      String            @default("DIRECT") // DIRECT, CONSTANT, UPPERCASE, LOWERCASE, TITLECASE, TRIM, DATE_ISO, NUMBER, BOOLEAN, MAP
+  transformArg   String? // CONSTANT value, or JSON object for MAP lookups
+  required       Boolean           @default(false)
+  enabled        Boolean           @default(true)
+  notes          String?
+  demo           Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@unique([externalSystem, entityType, internalField])
+  @@index([externalSystem, entityType])
+}
+
+// Phase 2: declarative validation rules. A null externalSystem means the rule
+// applies to every provider. The validation engine loads rules per entityType
+// (+ provider) and evaluates them against each internal entity.
+model ValidationRule {
+  id             String             @id @default(cuid())
+  externalSystem IntegrationSystem? // null = applies to all providers
+  entityType     String
+  field          String
+  ruleType       String // REQUIRED, REGEX, MIN, MAX, ENUM, LENGTH_MAX, GIS_PRESENT
+  param          String? // regex source, numeric bound, comma-separated enum, or max length
+  severity       String             @default("ERROR") // ERROR | WARNING
+  message        String
+  enabled        Boolean            @default(true)
+  demo           Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([entityType])
+  @@index([externalSystem, entityType])
+}

@@ -30,6 +30,7 @@ export const NAV: NavItem[] = [
   { key: 'communication', label: 'Communication', path: '/communication', group: 'People' },
   { key: 'key_personnel', label: 'Key Personnel', path: '/personnel', group: 'People' },
   { key: 'reports', label: 'Reports', path: '/reports', group: 'Reports' },
+  { key: 'sujalam_bharat', label: 'Sujalam Bharat', path: '/sujalam', group: 'Sujalam Bharat' },
 ];
 
 // Presentation metadata for the Executive Overview "featured modules" cards.
@@ -57,6 +58,7 @@ export const MODULE_META: Record<string, ModuleMeta> = {
   communication: { icon: 'send', desc: 'Chain-of-command messaging and escalation.', accent: 'cyan' },
   key_personnel: { icon: 'users', desc: 'Directory of key personnel and responsibilities.', accent: 'teal' },
   reports: { icon: 'file', desc: 'Operational and compliance reporting.', accent: 'cyan' },
+  sujalam_bharat: { icon: 'layers', desc: 'Government integration — Sujalam Bharat / JJM ID mapping & sync.', accent: 'green', badge: 'NEW' },
 };
 
 export const GROUP_ORDER = [
@@ -68,4 +70,5 @@ export const GROUP_ORDER = [
   'Intelligence',
   'People',
   'Reports',
+  'Sujalam Bharat',
 ];

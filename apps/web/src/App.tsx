@@ -17,6 +17,7 @@ import { Instruments } from './Instruments';
 import { CommandCenter } from './CommandCenter';
 import { Accountability } from './Accountability';
 import { Preventive } from './Preventive';
+import { SujalamBharat } from './SujalamBharat';
 import { Admin } from './Admin';
 import { NAV } from './registry';
 import { ReactNode } from 'react';
@@ -38,6 +39,7 @@ const PAGE_COMPONENTS: Record<string, ReactNode> = {
   command_center: <CommandCenter />,
   accountability: <Accountability />,
   predictive: <Preventive />,
+  sujalam_bharat: <SujalamBharat />,
 };
 
 function AppRoutes() {

@@ -241,6 +241,12 @@ export const api = {
   sujalamImportJjm: () => http.post('/sujalam/import/jjm', {}).then((r) => r.data as ImportResult),
   sujalamResolveConflict: (id: string, resolution: 'INTERNAL' | 'EXTERNAL') =>
     http.post(`/sujalam/conflicts/${id}/resolve`, { resolution }).then((r) => r.data as { id: string; resolved: boolean; resolution: string }),
+  sujalamMyAccess: () => http.get('/sujalam/my-access').then((r) => r.data as MyAccess),
+  sujalamReportIndex: () => http.get('/sujalam/reports').then((r) => r.data as ReportIndex),
+  sujalamReadiness: (district?: string) => http.get('/sujalam/reports/readiness', { params: { district } }).then((r) => r.data as ReadinessReport),
+  sujalamSyncActivity: () => http.get('/sujalam/reports/sync-activity').then((r) => r.data as SyncActivityReport),
+  sujalamJjmMigration: () => http.get('/sujalam/reports/jjm-migration').then((r) => r.data as JjmMigrationReport),
+  sujalamRoleMappings: () => http.get('/sujalam/role-mappings').then((r) => r.data as RoleMappingRow[]),
 
   // Command Center
   commandCenter: () => http.get('/command-center/summary').then((r) => r.data as CommandCenterData),
@@ -434,6 +440,35 @@ export interface SyncJobs { syncJobs: SyncJobRow[]; legacyImports: LegacyImportR
 export interface ConflictRow {
   id: string; entityType: string; internalEntityId: string | null; externalEntityId: string | null;
   label: string | null; field: string | null; internalValue: unknown; externalValue: unknown; ts: string;
+}
+export interface MyAccess {
+  roleName: string | null; externalRole: string | null;
+  canPush: boolean; canPull: boolean; canResolve: boolean; canImport: boolean; geoScope: string; mapped: boolean;
+}
+export interface ReportIndex {
+  reports: { key: string; label: string; description: string }[];
+  generatedAt: string; mock: boolean; disclaimer: string;
+}
+export interface ReadinessRow {
+  entityType: string; label: string; total: number; mapped: number; mappedPct: number;
+  valid: number; validPct: number; gisCovered: number | null; gisPct: number | null;
+}
+export interface ReadinessReport { district: string; rows: ReadinessRow[]; overallReadinessPct: number; mock: boolean; disclaimer: string }
+export interface SyncActivityReport {
+  totalJobs: number; byState: Record<string, number>; byDirection: Record<string, number>;
+  totals: { success: number; failed: number; rejected: number }; openConflicts: number;
+  lastPush: { entityType: string | null; state: string; at: string } | null;
+  lastPull: { entityType: string | null; state: string; at: string } | null;
+  mock: boolean; disclaimer: string;
+}
+export interface JjmMigrationReport {
+  totals: { batches: number; total: number; created: number; linked: number; skipped: number };
+  batches: { id: string; batchLabel: string; state: string; total: number; created: number; linked: number; skipped: number; startedAt: string }[];
+  mock: boolean; disclaimer: string;
+}
+export interface RoleMappingRow {
+  swatiRole: string; externalRole: string; externalSystem: string;
+  canPush: boolean; canPull: boolean; canResolve: boolean; canImport: boolean; geoScope: string;
 }
 
 export interface Instrument {

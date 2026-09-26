@@ -3,9 +3,13 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
   SujalamOverview, FieldMappingRow, ValidationRuleRow, MapPreview, ValidationReport, SujalamGis,
-  SyncJobs, ConflictRow, SyncResult, ImportResult, api,
+  SyncJobs, ConflictRow, SyncResult, ImportResult, MyAccess,
+  ReadinessReport, SyncActivityReport, JjmMigrationReport, RoleMappingRow, api,
 } from './api';
 import { useAuth } from './contexts';
+
+const DISTRICTS = ['ALL', 'Nadia', 'Purba Medinipur'];
+type ReportType = 'readiness' | 'sync-activity' | 'jjm-migration' | 'access-matrix';
 
 const SYS_LABEL: Record<string, string> = {
   SUJALAM_BHARAT: 'Sujalam Bharat',
@@ -38,7 +42,7 @@ function fmtVal(v: unknown): string {
   return String(v);
 }
 
-type Tab = 'overview' | 'mapping' | 'validation' | 'gis' | 'sync';
+type Tab = 'overview' | 'mapping' | 'validation' | 'gis' | 'sync' | 'reports';
 
 export function SujalamBharat() {
   const { user } = useAuth();
@@ -57,10 +61,29 @@ export function SujalamBharat() {
   const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [actionMsg, setActionMsg] = useState('');
+  const [access, setAccess] = useState<MyAccess | null>(null);
+  const [reportType, setReportType] = useState<ReportType>('readiness');
+  const [reportDistrict, setReportDistrict] = useState('ALL');
+  const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
+  const [syncActivity, setSyncActivity] = useState<SyncActivityReport | null>(null);
+  const [jjmReport, setJjmReport] = useState<JjmMigrationReport | null>(null);
+  const [roleMappings, setRoleMappings] = useState<RoleMappingRow[]>([]);
 
   useEffect(() => {
     api.sujalamOverview().then(setOv).catch(() => setErr('Could not load Sujalam Bharat integration data.'));
   }, []);
+
+  // RBAC: resolve the current user's integration capabilities (re-runs on login).
+  useEffect(() => { api.sujalamMyAccess().then(setAccess).catch(() => setAccess(null)); }, [user]);
+
+  useEffect(() => {
+    if (tab !== 'reports') return;
+    setErr('');
+    if (reportType === 'readiness') api.sujalamReadiness(reportDistrict).then(setReadiness).catch(() => setErr('Could not load report.'));
+    else if (reportType === 'sync-activity') api.sujalamSyncActivity().then(setSyncActivity).catch(() => setErr('Could not load report.'));
+    else if (reportType === 'jjm-migration') api.sujalamJjmMigration().then(setJjmReport).catch(() => setErr('Could not load report.'));
+    else if (reportType === 'access-matrix') api.sujalamRoleMappings().then(setRoleMappings).catch(() => setErr('Could not load report.'));
+  }, [tab, reportType, reportDistrict]);
 
   useEffect(() => {
     if (tab !== 'gis' || gis) return;
@@ -152,6 +175,7 @@ export function SujalamBharat() {
         {tabBtn('validation', 'Validation')}
         {tabBtn('gis', 'GIS Map')}
         {tabBtn('sync', 'Sync')}
+        {tabBtn('reports', 'Reports')}
         {(tab === 'mapping' || tab === 'validation' || tab === 'sync') && (
           <span style={{ display: 'inline-flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
             <select className="input" value={system} onChange={(e) => setSystem(e.target.value)}>
@@ -170,33 +194,51 @@ export function SujalamBharat() {
       {tab === 'gis' && <GisTab gis={gis} />}
       {tab === 'sync' && (
         <SyncTab
-          jobs={jobs} conflicts={conflicts} busy={busy} actionMsg={actionMsg} canAct={!!user}
+          jobs={jobs} conflicts={conflicts} busy={busy} actionMsg={actionMsg} access={access} loggedIn={!!user}
           onPush={() => runAction('Push', () => api.sujalamPush(system, entityType))}
           onPull={() => runAction('Pull', () => api.sujalamPull(system, entityType))}
           onImport={() => runAction('JJM import', () => api.sujalamImportJjm())}
           onResolve={resolve}
         />
       )}
+      {tab === 'reports' && (
+        <ReportsTab
+          reportType={reportType} setReportType={setReportType}
+          district={reportDistrict} setDistrict={setReportDistrict}
+          readiness={readiness} syncActivity={syncActivity} jjm={jjmReport} roleMappings={roleMappings}
+        />
+      )}
     </div>
   );
 }
 
-function SyncTab({ jobs, conflicts, busy, actionMsg, canAct, onPush, onPull, onImport, onResolve }: {
-  jobs: SyncJobs | null; conflicts: ConflictRow[]; busy: boolean; actionMsg: string; canAct: boolean;
+function SyncTab({ jobs, conflicts, busy, actionMsg, access, loggedIn, onPush, onPull, onImport, onResolve }: {
+  jobs: SyncJobs | null; conflicts: ConflictRow[]; busy: boolean; actionMsg: string;
+  access: MyAccess | null; loggedIn: boolean;
   onPush: () => void; onPull: () => void; onImport: () => void;
   onResolve: (id: string, resolution: 'INTERNAL' | 'EXTERNAL') => void;
 }) {
   const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleString() : '—');
   const stateColor = (s: string) => (s === 'SUCCESS' ? 'ok' : s === 'PARTIAL' ? 'watch' : s === 'FAILED' ? 'alarm' : 'watch');
+  const btn = (allowed: boolean) => ({ cursor: allowed && !busy ? 'pointer' : 'default', padding: '8px 16px', border: '1px solid var(--line)', opacity: allowed && !busy ? 1 : 0.5 } as const);
+  const canPush = !!access?.canPush, canPull = !!access?.canPull, canImport = !!access?.canImport, canResolve = !!access?.canResolve;
   return (
     <>
       <div className="panel" style={{ marginBottom: 12 }}>
         <h3 style={{ marginTop: 0 }}>Run sync <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>· mock bidirectional sync + legacy import</span></h3>
-        {!canAct && <div className="cc-legend row" style={{ fontSize: 12, marginBottom: 10 }}><span style={{ color: 'var(--watch)' }}>Sign in to run sync actions (public users can view history and conflicts).</span></div>}
+        {!loggedIn && <div className="cc-legend row" style={{ fontSize: 12, marginBottom: 10 }}><span style={{ color: 'var(--watch)' }}>Sign in to run sync actions (public users can view history and conflicts).</span></div>}
+        {loggedIn && access && (
+          <div className="cc-legend row" style={{ fontSize: 12, marginBottom: 10 }}>
+            <span className="muted">Acting as <strong>{access.roleName ?? '—'}</strong>
+              {access.externalRole && <> → {access.externalRole}</>} · scope <strong>{access.geoScope}</strong>
+              {!access.mapped && <span style={{ color: 'var(--alarm)' }}> · no integration role mapping (no capabilities)</span>}
+            </span>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button className="pill ok" style={{ cursor: 'pointer', padding: '8px 16px', opacity: canAct && !busy ? 1 : 0.5 }} disabled={!canAct || busy} onClick={onPush}>Push to provider →</button>
-          <button className="pill" style={{ cursor: 'pointer', padding: '8px 16px', border: '1px solid var(--line)', opacity: canAct && !busy ? 1 : 0.5 }} disabled={!canAct || busy} onClick={onPull}>← Pull from provider</button>
-          <button className="pill" style={{ cursor: 'pointer', padding: '8px 16px', border: '1px solid var(--line)', opacity: canAct && !busy ? 1 : 0.5 }} disabled={!canAct || busy} onClick={onImport}>Import from JJM 1.0</button>
+          <button className="pill ok" style={btn(canPush)} disabled={!canPush || busy} onClick={onPush} title={canPush ? '' : 'Your role cannot push'}>Push to provider →</button>
+          <button className="pill" style={btn(canPull)} disabled={!canPull || busy} onClick={onPull} title={canPull ? '' : 'Your role cannot pull'}>← Pull from provider</button>
+          <button className="pill" style={btn(canImport)} disabled={!canImport || busy} onClick={onImport} title={canImport ? '' : 'Your role cannot import'}>Import from JJM 1.0</button>
         </div>
         {actionMsg && <p className="muted" style={{ marginBottom: 0, marginTop: 10, fontSize: 13 }}>{actionMsg}</p>}
       </div>
@@ -213,8 +255,8 @@ function SyncTab({ jobs, conflicts, busy, actionMsg, canAct, onPush, onPull, onI
                 <td className="tnum">{String(c.internalValue ?? '—')}</td>
                 <td className="tnum" style={{ color: 'var(--watch)' }}>{String(c.externalValue ?? '—')}</td>
                 <td style={{ display: 'flex', gap: 6 }}>
-                  <button className="pill" style={{ cursor: canAct && !busy ? 'pointer' : 'default', border: '1px solid var(--line)', opacity: canAct && !busy ? 1 : 0.5 }} disabled={!canAct || busy} onClick={() => onResolve(c.id, 'INTERNAL')}>Keep SWATI</button>
-                  <button className="pill watch" style={{ cursor: canAct && !busy ? 'pointer' : 'default', opacity: canAct && !busy ? 1 : 0.5 }} disabled={!canAct || busy} onClick={() => onResolve(c.id, 'EXTERNAL')}>Take provider</button>
+                  <button className="pill" style={{ cursor: canResolve && !busy ? 'pointer' : 'default', border: '1px solid var(--line)', opacity: canResolve && !busy ? 1 : 0.5 }} disabled={!canResolve || busy} onClick={() => onResolve(c.id, 'INTERNAL')}>Keep SWATI</button>
+                  <button className="pill watch" style={{ cursor: canResolve && !busy ? 'pointer' : 'default', opacity: canResolve && !busy ? 1 : 0.5 }} disabled={!canResolve || busy} onClick={() => onResolve(c.id, 'EXTERNAL')}>Take provider</button>
                 </td>
               </tr>
             ))}
@@ -265,6 +307,147 @@ function SyncTab({ jobs, conflicts, busy, actionMsg, canAct, onPush, onPull, onI
         </table>
         {(!jobs || jobs.legacyImports.length === 0) && <p className="muted">No legacy imports yet.</p>}
       </div>
+    </>
+  );
+}
+
+const REPORT_TYPES: { key: ReportType; label: string }[] = [
+  { key: 'readiness', label: 'Integration readiness' },
+  { key: 'sync-activity', label: 'Sync activity' },
+  { key: 'jjm-migration', label: 'JJM 1.0 migration' },
+  { key: 'access-matrix', label: 'Access matrix (RBAC)' },
+];
+
+function pctColor(p: number): string {
+  return p >= 80 ? 'var(--ok)' : p >= 40 ? 'var(--watch)' : 'var(--alarm)';
+}
+const yn = (b: boolean) => (b ? <span style={{ color: 'var(--ok)' }}>✓</span> : <span className="muted">—</span>);
+
+function ReportsTab({ reportType, setReportType, district, setDistrict, readiness, syncActivity, jjm, roleMappings }: {
+  reportType: ReportType; setReportType: (t: ReportType) => void;
+  district: string; setDistrict: (d: string) => void;
+  readiness: ReadinessReport | null; syncActivity: SyncActivityReport | null;
+  jjm: JjmMigrationReport | null; roleMappings: RoleMappingRow[];
+}) {
+  const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleString() : '—');
+  return (
+    <>
+      <div className="panel" style={{ marginBottom: 12, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <select className="input" value={reportType} onChange={(e) => setReportType(e.target.value as ReportType)}>
+          {REPORT_TYPES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+        </select>
+        {reportType === 'readiness' && (
+          <select className="input" value={district} onChange={(e) => setDistrict(e.target.value)}>
+            {DISTRICTS.map((d) => <option key={d} value={d}>{d === 'ALL' ? 'All districts' : d}</option>)}
+          </select>
+        )}
+        <span className="muted" style={{ fontSize: 12 }}>Demonstration report — not an official government document.</span>
+      </div>
+
+      {reportType === 'readiness' && (
+        <>
+          <section className="kpi-grid" style={{ marginBottom: 14 }}>
+            <div className="kpi"><div className="val tnum" style={{ color: readiness ? pctColor(readiness.overallReadinessPct) : undefined }}>{readiness ? `${readiness.overallReadinessPct}%` : '—'}</div><div className="lbl">Overall readiness ({readiness?.district ?? 'ALL'})</div></div>
+          </section>
+          <div className="panel">
+            <h3 style={{ marginTop: 0 }}>Integration readiness by entity</h3>
+            <table className="tbl">
+              <thead><tr><th>Entity</th><th>Total</th><th>Mapped</th><th>Mapped %</th><th>Valid</th><th>Valid %</th><th>GIS covered</th><th>GIS %</th></tr></thead>
+              <tbody>
+                {(readiness?.rows ?? []).map((r) => (
+                  <tr key={r.entityType}>
+                    <td>{r.label}</td>
+                    <td className="tnum">{r.total}</td>
+                    <td className="tnum">{r.mapped}</td>
+                    <td className="tnum" style={{ color: pctColor(r.mappedPct) }}>{r.mappedPct}%</td>
+                    <td className="tnum">{r.valid}</td>
+                    <td className="tnum" style={{ color: pctColor(r.validPct) }}>{r.validPct}%</td>
+                    <td className="tnum">{r.gisCovered ?? '—'}</td>
+                    <td className="tnum" style={{ color: r.gisPct != null ? pctColor(r.gisPct) : undefined }}>{r.gisPct != null ? `${r.gisPct}%` : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!readiness && <p className="muted">Loading…</p>}
+          </div>
+        </>
+      )}
+
+      {reportType === 'sync-activity' && (
+        <>
+          <section className="kpi-grid" style={{ marginBottom: 14 }}>
+            <div className="kpi"><div className="val tnum">{syncActivity ? syncActivity.totalJobs : '—'}</div><div className="lbl">Sync jobs</div></div>
+            <div className="kpi"><div className="val tnum" style={{ color: 'var(--ok)' }}>{syncActivity ? syncActivity.totals.success : '—'}</div><div className="lbl">Records synced</div></div>
+            <div className="kpi"><div className="val tnum" style={{ color: 'var(--alarm)' }}>{syncActivity ? syncActivity.totals.failed : '—'}</div><div className="lbl">Failed</div></div>
+            <div className="kpi"><div className="val tnum" style={{ color: 'var(--watch)' }}>{syncActivity ? syncActivity.openConflicts : '—'}</div><div className="lbl">Open conflicts</div></div>
+          </section>
+          <div className="panel">
+            <h3 style={{ marginTop: 0 }}>Sync activity</h3>
+            <div className="cc-legend row" style={{ fontSize: 13, flexWrap: 'wrap', gap: 16 }}>
+              {syncActivity && Object.entries(syncActivity.byDirection).map(([k, v]) => <div key={k}><strong>{v}</strong> {k}</div>)}
+              {syncActivity && Object.entries(syncActivity.byState).map(([k, v]) => <div key={k}><span className="dot" style={{ background: k === 'SUCCESS' ? 'var(--ok)' : k === 'PARTIAL' ? 'var(--watch)' : 'var(--alarm)' }} />{k}: <strong>{v}</strong></div>)}
+            </div>
+            <p className="muted" style={{ marginTop: 12, marginBottom: 0, fontSize: 12 }}>
+              Last push: {syncActivity?.lastPush ? `${syncActivity.lastPush.entityType} · ${syncActivity.lastPush.state} · ${fmtDate(syncActivity.lastPush.at)}` : 'none'}<br />
+              Last pull: {syncActivity?.lastPull ? `${syncActivity.lastPull.entityType} · ${syncActivity.lastPull.state} · ${fmtDate(syncActivity.lastPull.at)}` : 'none'}
+            </p>
+          </div>
+        </>
+      )}
+
+      {reportType === 'jjm-migration' && (
+        <>
+          <section className="kpi-grid" style={{ marginBottom: 14 }}>
+            <div className="kpi"><div className="val tnum">{jjm ? jjm.totals.batches : '—'}</div><div className="lbl">Import batches</div></div>
+            <div className="kpi"><div className="val tnum" style={{ color: 'var(--ok)' }}>{jjm ? jjm.totals.created : '—'}</div><div className="lbl">Created</div></div>
+            <div className="kpi"><div className="val tnum">{jjm ? jjm.totals.linked : '—'}</div><div className="lbl">Linked</div></div>
+            <div className="kpi"><div className="val tnum muted">{jjm ? jjm.totals.skipped : '—'}</div><div className="lbl">Skipped</div></div>
+          </section>
+          <div className="panel">
+            <h3 style={{ marginTop: 0 }}>JJM 1.0 migration batches</h3>
+            <table className="tbl">
+              <thead><tr><th>Batch</th><th>State</th><th>Total</th><th>Created</th><th>Linked</th><th>Skipped</th><th>When</th></tr></thead>
+              <tbody>
+                {(jjm?.batches ?? []).map((b) => (
+                  <tr key={b.id}>
+                    <td>{b.batchLabel}</td>
+                    <td><span className={`pill ${b.state === 'SUCCESS' ? 'ok' : 'watch'}`}>{b.state}</span></td>
+                    <td className="tnum">{b.total}</td>
+                    <td className="tnum" style={{ color: 'var(--ok)' }}>{b.created}</td>
+                    <td className="tnum">{b.linked}</td>
+                    <td className="tnum muted">{b.skipped}</td>
+                    <td className="muted" style={{ fontSize: 12 }}>{fmtDate(b.startedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {(!jjm || jjm.batches.length === 0) && <p className="muted">No legacy imports yet.</p>}
+          </div>
+        </>
+      )}
+
+      {reportType === 'access-matrix' && (
+        <div className="panel">
+          <h3 style={{ marginTop: 0 }}>Access matrix <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>· SWATI role → government role &amp; integration capabilities</span></h3>
+          <table className="tbl">
+            <thead><tr><th>SWATI role</th><th>Government role</th><th>Push</th><th>Pull</th><th>Resolve</th><th>Import</th><th>Geo-scope</th></tr></thead>
+            <tbody>
+              {roleMappings.map((r) => (
+                <tr key={r.swatiRole}>
+                  <td>{r.swatiRole}</td>
+                  <td className="muted">{r.externalRole}</td>
+                  <td>{yn(r.canPush)}</td>
+                  <td>{yn(r.canPull)}</td>
+                  <td>{yn(r.canResolve)}</td>
+                  <td>{yn(r.canImport)}</td>
+                  <td><span className="pill">{r.geoScope}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {roleMappings.length === 0 && <p className="muted">No role mappings configured.</p>}
+        </div>
+      )}
     </>
   );
 }

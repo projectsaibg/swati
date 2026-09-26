@@ -4,9 +4,17 @@ import 'leaflet/dist/leaflet.css';
 import {
   SujalamOverview, FieldMappingRow, ValidationRuleRow, MapPreview, ValidationReport, SujalamGis,
   SyncJobs, ConflictRow, SyncResult, ImportResult, MyAccess,
-  ReadinessReport, SyncActivityReport, JjmMigrationReport, RoleMappingRow, api,
+  ReadinessReport, SyncActivityReport, JjmMigrationReport, RoleMappingRow, ClassificationSummary, api,
 } from './api';
 import { useAuth } from './contexts';
+
+function classify(field: string, cls: ClassificationSummary | null): 'PUBLIC' | 'INTERNAL' | 'SENSITIVE' {
+  if (!cls) return 'PUBLIC';
+  if (cls.sensitive.includes(field)) return 'SENSITIVE';
+  if (cls.internal.includes(field)) return 'INTERNAL';
+  return 'PUBLIC';
+}
+const CLASS_PILL: Record<string, string> = { PUBLIC: '', INTERNAL: 'watch', SENSITIVE: 'alarm' };
 
 const DISTRICTS = ['ALL', 'Nadia', 'Purba Medinipur'];
 type ReportType = 'readiness' | 'sync-activity' | 'jjm-migration' | 'access-matrix';
@@ -68,9 +76,11 @@ export function SujalamBharat() {
   const [syncActivity, setSyncActivity] = useState<SyncActivityReport | null>(null);
   const [jjmReport, setJjmReport] = useState<JjmMigrationReport | null>(null);
   const [roleMappings, setRoleMappings] = useState<RoleMappingRow[]>([]);
+  const [classification, setClassification] = useState<ClassificationSummary | null>(null);
 
   useEffect(() => {
     api.sujalamOverview().then(setOv).catch(() => setErr('Could not load Sujalam Bharat integration data.'));
+    api.sujalamClassification().then(setClassification).catch(() => {});
   }, []);
 
   // RBAC: resolve the current user's integration capabilities (re-runs on login).
@@ -189,7 +199,7 @@ export function SujalamBharat() {
       </div>
 
       {tab === 'overview' && <OverviewTab ov={ov} />}
-      {tab === 'mapping' && <MappingTab mappings={mappings} preview={preview} />}
+      {tab === 'mapping' && <MappingTab mappings={mappings} preview={preview} classification={classification} authed={!!user} />}
       {tab === 'validation' && <ValidationTab rules={rules} report={report} />}
       {tab === 'gis' && <GisTab gis={gis} />}
       {tab === 'sync' && (
@@ -568,17 +578,20 @@ function OverviewTab({ ov }: { ov: SujalamOverview | null }) {
   );
 }
 
-function MappingTab({ mappings, preview }: { mappings: FieldMappingRow[]; preview: MapPreview | null }) {
+function MappingTab({ mappings, preview, classification, authed }: { mappings: FieldMappingRow[]; preview: MapPreview | null; classification: ClassificationSummary | null; authed: boolean }) {
   return (
     <>
       <div className="panel" style={{ marginBottom: 12 }}>
         <h3 style={{ marginTop: 0 }}>Field mapping <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>· SWATI field → external field</span></h3>
         <table className="tbl">
-          <thead><tr><th>Internal field</th><th></th><th>External field</th><th>Transform</th><th>Required</th></tr></thead>
+          <thead><tr><th>Internal field</th><th>Class</th><th></th><th>External field</th><th>Transform</th><th>Required</th></tr></thead>
           <tbody>
-            {mappings.map((m) => (
+            {mappings.map((m) => {
+              const cls = classify(m.internalField, classification);
+              return (
               <tr key={m.id}>
                 <td className="tnum">{m.internalField}</td>
+                <td>{cls === 'PUBLIC' ? <span className="muted" style={{ fontSize: 11 }}>public</span> : <span className={`pill ${CLASS_PILL[cls]}`} style={{ fontSize: 10 }}>{cls}</span>}</td>
                 <td className="muted">→</td>
                 <td className="tnum">{m.externalField}</td>
                 <td>
@@ -587,10 +600,16 @@ function MappingTab({ mappings, preview }: { mappings: FieldMappingRow[]; previe
                 </td>
                 <td>{m.required ? <span className="pill watch">required</span> : <span className="muted">optional</span>}</td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
         {mappings.length === 0 && <p className="muted">No field mappings configured for this provider + entity type.</p>}
+        {classification && (
+          <p className="muted" style={{ marginTop: 8, marginBottom: 0, fontSize: 12 }}>
+            <span className="pill alarm" style={{ fontSize: 10 }}>SENSITIVE</span> household-level and <span className="pill watch" style={{ fontSize: 10 }}>INTERNAL</span> demographic fields are redacted from public responses. {classification.note}
+          </p>
+        )}
       </div>
 
       <div className="panel">
@@ -598,6 +617,11 @@ function MappingTab({ mappings, preview }: { mappings: FieldMappingRow[]; previe
           Payload preview
           {preview?.entity && <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}> · {preview.entity.label}</span>}
         </h3>
+        {!authed && preview?.redactedFields && preview.redactedFields.length > 0 && (
+          <div className="cc-legend row" style={{ fontSize: 12, marginBottom: 10 }}>
+            <span style={{ color: 'var(--watch)' }}>Redacted for public view: {preview.redactedFields.join(', ')} — sign in to reveal.</span>
+          </div>
+        )}
         {preview?.missingRequired && preview.missingRequired.length > 0 && (
           <div className="cc-legend row" style={{ fontSize: 12, marginBottom: 10 }}>
             <span style={{ color: 'var(--alarm)' }}>Missing required: {preview.missingRequired.join(', ')}</span>

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { SujalamOverview, api } from './api';
+import {
+  SujalamOverview, FieldMappingRow, ValidationRuleRow, MapPreview, ValidationReport, api,
+} from './api';
 
 const SYS_LABEL: Record<string, string> = {
   SUJALAM_BHARAT: 'Sujalam Bharat',
@@ -15,27 +17,74 @@ const STATUS_COLOR: Record<string, string> = {
   CONFLICT: 'var(--alarm)',
   SYNC_FAILED: 'var(--alarm)',
 };
+const SYSTEMS = ['SUJALAM_BHARAT', 'JJM_1_0'] as const;
+const ENTITY_TYPES: { key: string; label: string }[] = [
+  { key: 'SCHEME', label: 'Schemes' },
+  { key: 'SERVICE_AREA', label: 'Service areas' },
+  { key: 'SUJAL_GAON', label: 'Sujal Gaon villages' },
+  { key: 'INFRASTRUCTURE', label: 'Infrastructure' },
+];
 
 function readinessColor(pct: number): string {
   return pct >= 80 ? 'var(--ok)' : pct >= 40 ? 'var(--watch)' : 'var(--alarm)';
 }
+function fmtVal(v: unknown): string {
+  if (v === null || v === undefined) return '—';
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+
+type Tab = 'overview' | 'mapping' | 'validation';
 
 export function SujalamBharat() {
-  const [ov, setOv] = useState<SujalamOverview | null>(null);
+  const [tab, setTab] = useState<Tab>('overview');
+  const [system, setSystem] = useState<string>('SUJALAM_BHARAT');
+  const [entityType, setEntityType] = useState<string>('SCHEME');
   const [err, setErr] = useState('');
 
+  const [ov, setOv] = useState<SujalamOverview | null>(null);
+  const [mappings, setMappings] = useState<FieldMappingRow[]>([]);
+  const [preview, setPreview] = useState<MapPreview | null>(null);
+  const [rules, setRules] = useState<ValidationRuleRow[]>([]);
+  const [report, setReport] = useState<ValidationReport | null>(null);
+
   useEffect(() => {
-    api.sujalamOverview()
-      .then(setOv)
-      .catch(() => setErr('Could not load Sujalam Bharat integration data.'));
+    api.sujalamOverview().then(setOv).catch(() => setErr('Could not load Sujalam Bharat integration data.'));
   }, []);
+
+  useEffect(() => {
+    if (tab !== 'mapping') return;
+    setErr('');
+    Promise.all([api.sujalamFieldMappings(system, entityType), api.sujalamMapPreview(system, entityType)])
+      .then(([m, p]) => { setMappings(m); setPreview(p); })
+      .catch(() => setErr('Could not load field mappings.'));
+  }, [tab, system, entityType]);
+
+  useEffect(() => {
+    if (tab !== 'validation') return;
+    setErr('');
+    Promise.all([api.sujalamValidationRules(system, entityType), api.sujalamValidationReport(system, entityType)])
+      .then(([r, rep]) => { setRules(r); setReport(rep); })
+      .catch(() => setErr('Could not load validation report.'));
+  }, [tab, system, entityType]);
+
+  const tabBtn = (t: Tab, label: string) => (
+    <button
+      key={t}
+      onClick={() => setTab(t)}
+      className={`pill ${tab === t ? 'ok' : ''}`}
+      style={{ cursor: 'pointer', border: '1px solid var(--border, #2a2a3a)', background: tab === t ? undefined : 'transparent', color: tab === t ? undefined : 'var(--muted)', padding: '6px 14px' }}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <div>
       <div className="exec-head">
         <div>
           <h1 className="exec-title" style={{ fontSize: 26 }}>SUJALAM BHARAT INTEGRATION</h1>
-          <p className="exec-sub">Government scheme &amp; asset ID mapping, integration readiness and sync status</p>
+          <p className="exec-sub">Government scheme &amp; asset ID mapping, field/schema mapping, validation and readiness</p>
         </div>
         <div className="statuspills">
           <span className="spill" style={{ color: 'var(--watch)', borderColor: 'var(--watch)' }}>DEMO / MOCK</span>
@@ -44,7 +93,7 @@ export function SujalamBharat() {
 
       {err && <div className="err">{err}</div>}
 
-      {/* Demo / mock banner — this layer is architectural preparation, not an official integration. */}
+      {/* Demo / mock banner */}
       <div className="panel" style={{ marginBottom: 12, borderLeft: '3px solid var(--watch)' }}>
         <strong style={{ color: 'var(--watch)' }}>Demonstration data — not a government system.</strong>
         <p className="muted" style={{ margin: '6px 0 0', maxWidth: 780 }}>
@@ -53,37 +102,48 @@ export function SujalamBharat() {
         </p>
       </div>
 
-      {/* Readiness + counts */}
+      {/* Tab bar */}
+      <div className="panel" style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        {tabBtn('overview', 'Overview')}
+        {tabBtn('mapping', 'Field Mapping')}
+        {tabBtn('validation', 'Validation')}
+        {tab !== 'overview' && (
+          <span style={{ display: 'inline-flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
+            <select className="input" value={system} onChange={(e) => setSystem(e.target.value)}>
+              {SYSTEMS.map((s) => <option key={s} value={s}>{SYS_LABEL[s]}</option>)}
+            </select>
+            <select className="input" value={entityType} onChange={(e) => setEntityType(e.target.value)}>
+              {ENTITY_TYPES.map((e) => <option key={e.key} value={e.key}>{e.label}</option>)}
+            </select>
+          </span>
+        )}
+      </div>
+
+      {tab === 'overview' && <OverviewTab ov={ov} />}
+      {tab === 'mapping' && <MappingTab mappings={mappings} preview={preview} />}
+      {tab === 'validation' && <ValidationTab rules={rules} report={report} />}
+    </div>
+  );
+}
+
+function OverviewTab({ ov }: { ov: SujalamOverview | null }) {
+  return (
+    <>
       <section className="kpi-grid" style={{ marginBottom: 14 }}>
         <div className="kpi">
           <div className="val tnum" style={{ color: ov ? readinessColor(ov.readinessPct) : undefined }}>{ov ? `${ov.readinessPct}%` : '—'}</div>
           <div className="lbl">Mapping readiness</div>
         </div>
-        <div className="kpi">
-          <div className="val tnum">{ov ? ov.schemes.total : '—'}</div>
-          <div className="lbl">Schemes ({ov ? ov.schemes.mapped : 0} mapped)</div>
-        </div>
-        <div className="kpi">
-          <div className="val tnum">{ov ? ov.serviceAreas.total : '—'}</div>
-          <div className="lbl">Service areas</div>
-        </div>
-        <div className="kpi">
-          <div className="val tnum">{ov ? ov.sujalGaon.total : '—'}</div>
-          <div className="lbl">Sujal Gaon villages ({ov ? ov.sujalGaon.mapped : 0} mapped)</div>
-        </div>
-        <div className="kpi">
-          <div className="val tnum">{ov ? ov.infrastructure.total : '—'}</div>
-          <div className="lbl">Infrastructure assets ({ov ? ov.infrastructure.mapped : 0} mapped)</div>
-        </div>
+        <div className="kpi"><div className="val tnum">{ov ? ov.schemes.total : '—'}</div><div className="lbl">Schemes ({ov ? ov.schemes.mapped : 0} mapped)</div></div>
+        <div className="kpi"><div className="val tnum">{ov ? ov.serviceAreas.total : '—'}</div><div className="lbl">Service areas</div></div>
+        <div className="kpi"><div className="val tnum">{ov ? ov.sujalGaon.total : '—'}</div><div className="lbl">Sujal Gaon villages ({ov ? ov.sujalGaon.mapped : 0} mapped)</div></div>
+        <div className="kpi"><div className="val tnum">{ov ? ov.infrastructure.total : '—'}</div><div className="lbl">Infrastructure assets ({ov ? ov.infrastructure.mapped : 0} mapped)</div></div>
       </section>
 
-      {/* Providers */}
       <div className="panel" style={{ marginBottom: 12 }}>
         <h3 style={{ marginTop: 0 }}>Integration providers</h3>
         <table className="tbl">
-          <thead>
-            <tr><th>System</th><th>Name</th><th>Status</th><th>Mode</th><th>Push</th><th>Pull</th></tr>
-          </thead>
+          <thead><tr><th>System</th><th>Name</th><th>Status</th><th>Mode</th><th>Push</th><th>Pull</th></tr></thead>
           <tbody>
             {(ov?.providers ?? []).map((p, i) => (
               <tr key={i}>
@@ -100,24 +160,137 @@ export function SujalamBharat() {
         {(!ov || ov.providers.length === 0) && <p className="muted">No integration providers configured.</p>}
       </div>
 
-      {/* Mapping status breakdown */}
       <div className="panel">
         <h3 style={{ marginTop: 0 }}>Scheme mapping status</h3>
         <div className="cc-legend row" style={{ fontSize: 13, flexWrap: 'wrap', gap: 16 }}>
           {ov && Object.keys(ov.status).length > 0 ? (
             Object.entries(ov.status).map(([k, v]) => (
-              <div key={k}>
-                <span className="dot" style={{ background: STATUS_COLOR[k] ?? 'var(--muted)' }} /> {k}: <strong>{v}</strong>
-              </div>
+              <div key={k}><span className="dot" style={{ background: STATUS_COLOR[k] ?? 'var(--muted)' }} /> {k}: <strong>{v}</strong></div>
             ))
-          ) : (
-            <span className="muted">No mapping records yet.</span>
-          )}
+          ) : <span className="muted">No mapping records yet.</span>}
         </div>
         <p className="muted" style={{ marginTop: 12, marginBottom: 0, fontSize: 12 }}>
           Last sync: {ov?.lastSync ? `${SYS_LABEL[ov.lastSync.provider] ?? ov.lastSync.provider} · ${ov.lastSync.direction} · ${ov.lastSync.state}` : 'none yet'}
         </p>
       </div>
-    </div>
+    </>
+  );
+}
+
+function MappingTab({ mappings, preview }: { mappings: FieldMappingRow[]; preview: MapPreview | null }) {
+  return (
+    <>
+      <div className="panel" style={{ marginBottom: 12 }}>
+        <h3 style={{ marginTop: 0 }}>Field mapping <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>· SWATI field → external field</span></h3>
+        <table className="tbl">
+          <thead><tr><th>Internal field</th><th></th><th>External field</th><th>Transform</th><th>Required</th></tr></thead>
+          <tbody>
+            {mappings.map((m) => (
+              <tr key={m.id}>
+                <td className="tnum">{m.internalField}</td>
+                <td className="muted">→</td>
+                <td className="tnum">{m.externalField}</td>
+                <td>
+                  <span className="pill">{m.transform}</span>
+                  {m.transformArg && <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>{m.transformArg}</span>}
+                </td>
+                <td>{m.required ? <span className="pill watch">required</span> : <span className="muted">optional</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {mappings.length === 0 && <p className="muted">No field mappings configured for this provider + entity type.</p>}
+      </div>
+
+      <div className="panel">
+        <h3 style={{ marginTop: 0 }}>
+          Payload preview
+          {preview?.entity && <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}> · {preview.entity.label}</span>}
+        </h3>
+        {preview?.missingRequired && preview.missingRequired.length > 0 && (
+          <div className="cc-legend row" style={{ fontSize: 12, marginBottom: 10 }}>
+            <span style={{ color: 'var(--alarm)' }}>Missing required: {preview.missingRequired.join(', ')}</span>
+          </div>
+        )}
+        {preview?.entity ? (
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 260 }}>
+              <div className="ccp-h" style={{ marginBottom: 8 }}>Internal (SWATI)</div>
+              <table className="tbl">
+                <tbody>
+                  {Object.entries(preview.internal).map(([k, v]) => (
+                    <tr key={k}><td className="muted tnum">{k}</td><td className="tnum">{fmtVal(v)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ flex: 1, minWidth: 260 }}>
+              <div className="ccp-h" style={{ marginBottom: 8 }}>External payload (mock)</div>
+              <table className="tbl">
+                <tbody>
+                  {Object.entries(preview.external).map(([k, v]) => (
+                    <tr key={k}><td className="muted tnum">{k}</td><td className="tnum">{fmtVal(v)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : <p className="muted">No entity available to preview.</p>}
+      </div>
+    </>
+  );
+}
+
+function ValidationTab({ rules, report }: { rules: ValidationRuleRow[]; report: ValidationReport | null }) {
+  const s = report?.summary;
+  return (
+    <>
+      <section className="kpi-grid" style={{ marginBottom: 14 }}>
+        <div className="kpi"><div className="val tnum">{s ? s.total : '—'}</div><div className="lbl">Entities checked</div></div>
+        <div className="kpi"><div className="val tnum" style={{ color: 'var(--ok)' }}>{s ? s.valid : '—'}</div><div className="lbl">Valid (ready for sync)</div></div>
+        <div className="kpi"><div className="val tnum" style={{ color: 'var(--alarm)' }}>{s ? s.invalid : '—'}</div><div className="lbl">Invalid (has errors)</div></div>
+        <div className="kpi"><div className="val tnum" style={{ color: 'var(--watch)' }}>{s ? s.withWarnings : '—'}</div><div className="lbl">With warnings</div></div>
+        <div className="kpi"><div className="val tnum">{report ? report.ruleCount : '—'}</div><div className="lbl">Rules applied</div></div>
+      </section>
+
+      <div className="panel" style={{ marginBottom: 12 }}>
+        <h3 style={{ marginTop: 0 }}>Validation issues <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>· entities with errors or warnings</span></h3>
+        <table className="tbl">
+          <thead><tr><th>Entity</th><th>Status</th><th>Errors</th><th>Warnings</th><th>Details</th></tr></thead>
+          <tbody>
+            {(report?.issues ?? []).map((r) => (
+              <tr key={r.id}>
+                <td>{r.label}</td>
+                <td><span className={`pill ${r.valid ? 'watch' : 'alarm'}`}>{r.valid ? 'WARN' : 'INVALID'}</span></td>
+                <td className="tnum" style={{ color: r.errors ? 'var(--alarm)' : undefined }}>{r.errors}</td>
+                <td className="tnum" style={{ color: r.warnings ? 'var(--watch)' : undefined }}>{r.warnings}</td>
+                <td className="muted" style={{ fontSize: 12 }}>{r.details.map((d) => d.message).join(' · ')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {report && report.issues.length === 0 && <p className="muted">All checked entities pass with no warnings.</p>}
+      </div>
+
+      <div className="panel">
+        <h3 style={{ marginTop: 0 }}>Rules</h3>
+        <table className="tbl">
+          <thead><tr><th>Field</th><th>Rule</th><th>Param</th><th>Severity</th><th>Scope</th><th>Message</th></tr></thead>
+          <tbody>
+            {rules.map((r) => (
+              <tr key={r.id}>
+                <td className="tnum">{r.field}</td>
+                <td><span className="pill">{r.ruleType}</span></td>
+                <td className="muted tnum">{r.param ?? '—'}</td>
+                <td><span className={`pill ${r.severity === 'ERROR' ? 'alarm' : 'watch'}`}>{r.severity}</span></td>
+                <td className="muted">{r.externalSystem ? (SYS_LABEL[r.externalSystem] ?? r.externalSystem) : 'All providers'}</td>
+                <td className="muted" style={{ fontSize: 12 }}>{r.message}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {rules.length === 0 && <p className="muted">No validation rules configured for this entity type.</p>}
+      </div>
+    </>
   );
 }

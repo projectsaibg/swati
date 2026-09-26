@@ -223,6 +223,14 @@ export const api = {
 
   // Sujalam Bharat integration layer
   sujalamOverview: () => http.get('/sujalam/overview').then((r) => r.data as SujalamOverview),
+  sujalamFieldMappings: (system: string, entityType: string) =>
+    http.get('/sujalam/field-mappings', { params: { system, entityType } }).then((r) => r.data as FieldMappingRow[]),
+  sujalamValidationRules: (system: string, entityType: string) =>
+    http.get('/sujalam/validation-rules', { params: { system, entityType } }).then((r) => r.data as ValidationRuleRow[]),
+  sujalamMapPreview: (system: string, entityType: string, id?: string) =>
+    http.get('/sujalam/map-preview', { params: { system, entityType, id } }).then((r) => r.data as MapPreview),
+  sujalamValidationReport: (system: string, entityType: string) =>
+    http.get('/sujalam/validation-report', { params: { system, entityType } }).then((r) => r.data as ValidationReport),
 
   // Command Center
   commandCenter: () => http.get('/command-center/summary').then((r) => r.data as CommandCenterData),
@@ -360,6 +368,31 @@ export interface SujalamOverview {
   lastSync: { provider: string; direction: string; state: string; at: string } | null;
   mock: boolean;
   disclaimer: string;
+}
+
+export interface FieldMappingRow {
+  id: string; externalSystem: string; entityType: string;
+  internalField: string; externalField: string; transform: string;
+  transformArg: string | null; required: boolean; enabled: boolean; notes: string | null;
+}
+export interface ValidationRuleRow {
+  id: string; externalSystem: string | null; entityType: string;
+  field: string; ruleType: string; param: string | null; severity: string; message: string; enabled: boolean;
+}
+export interface MapPreview {
+  system: string; entityType: string; mappingCount: number;
+  entity: { id: string; label: string } | null;
+  internal: Record<string, unknown>; external: Record<string, unknown>;
+  missingRequired: string[]; mock: boolean; disclaimer: string;
+}
+export interface ValidationIssueRow {
+  id: string; label: string; valid: boolean; errors: number; warnings: number;
+  details: { field: string; ruleType: string; severity: string; message: string }[];
+}
+export interface ValidationReport {
+  system: string; entityType: string; ruleCount: number;
+  summary: { total: number; valid: number; invalid: number; withWarnings: number; readyForSync: number };
+  issues: ValidationIssueRow[]; mock: boolean; disclaimer: string;
 }
 
 export interface Instrument {

@@ -14,9 +14,22 @@
 import { Controller, Get, Injectable, Module, Query } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { Feature, Public } from './decorators';
+import { mapEntity, validateEntity, MappingSpec, ValidationRuleSpec } from './sujalam-engine';
 
 const DISCLAIMER =
   'SWATI is architecturally prepared for Sujalam Bharat integration. Official production integration is subject to government API specifications, authorization, credentials, security requirements and data-sharing protocols.';
+
+type IntegrationSystem = 'SUJALAM_BHARAT' | 'JJM_1_0';
+const SYSTEMS: IntegrationSystem[] = ['SUJALAM_BHARAT', 'JJM_1_0'];
+const ENTITY_TYPES = ['SCHEME', 'SERVICE_AREA', 'SUJAL_GAON', 'INFRASTRUCTURE'] as const;
+type EntityType = (typeof ENTITY_TYPES)[number];
+
+function normSystem(s?: string): IntegrationSystem {
+  return SYSTEMS.includes(s as IntegrationSystem) ? (s as IntegrationSystem) : 'SUJALAM_BHARAT';
+}
+function normEntity(e?: string): EntityType {
+  return (ENTITY_TYPES as readonly string[]).includes(e ?? '') ? (e as EntityType) : 'SCHEME';
+}
 
 @Injectable()
 export class SujalamService {
@@ -67,6 +80,117 @@ export class SujalamService {
       orderBy: { updatedAt: 'desc' }, take: 500,
     });
   }
+
+  // --- Phase 2: field/schema mapping + validation --------------------------
+
+  /** Configured field mappings for a provider + entity type. */
+  async fieldMappings(system: string, entityType: string) {
+    return this.prisma.fieldMapping.findMany({
+      where: { externalSystem: normSystem(system), entityType: normEntity(entityType) },
+      orderBy: { internalField: 'asc' },
+    });
+  }
+
+  /** Validation rules for an entity type (provider-specific + provider-agnostic). */
+  async validationRules(system: string, entityType: string) {
+    const sys = normSystem(system);
+    return this.prisma.validationRule.findMany({
+      where: { entityType: normEntity(entityType), OR: [{ externalSystem: sys }, { externalSystem: null }] },
+      orderBy: [{ field: 'asc' }, { ruleType: 'asc' }],
+    });
+  }
+
+  /** Load internal entities of a type as flat records ({ id, label, record }). */
+  private async loadEntities(entityType: EntityType, take = 500): Promise<Array<{ id: string; label: string; record: Record<string, unknown> }>> {
+    switch (entityType) {
+      case 'SCHEME': {
+        const rows = await this.prisma.schemeProfile.findMany({ take, orderBy: { schemeName: 'asc' } });
+        return rows.map((r) => ({ id: r.id, label: r.schemeName, record: {
+          schemeKey: r.schemeKey, swatiSchemeId: r.swatiSchemeId, sujalamBharatId: r.sujalamBharatId,
+          schemeName: r.schemeName, schemeType: r.schemeType, state: r.state, district: r.district,
+          block: r.block, gramPanchayat: r.gramPanchayat, status: r.status,
+        } }));
+      }
+      case 'SERVICE_AREA': {
+        const rows = await this.prisma.serviceArea.findMany({ take, orderBy: { name: 'asc' } });
+        return rows.map((r) => ({ id: r.id, label: r.name, record: {
+          serviceAreaId: r.serviceAreaId, sujalamBharatId: r.sujalamBharatId, name: r.name, state: r.state,
+          district: r.district, block: r.block, gramPanchayat: r.gramPanchayat, population: r.population,
+          households: r.households, fhtc: r.fhtc, targetHouseholds: r.targetHouseholds,
+          supplySource: r.supplySource, supplyMode: r.supplyMode, serviceStatus: r.serviceStatus,
+          gisBoundary: r.gisBoundary,
+        } }));
+      }
+      case 'SUJAL_GAON': {
+        const rows = await this.prisma.sujalGaon.findMany({ take, orderBy: { name: 'asc' } });
+        return rows.map((r) => ({ id: r.id, label: r.name, record: {
+          sujalGaonId: r.sujalGaonId, swatiVillageId: r.swatiVillageId, sujalamBharatId: r.sujalamBharatId,
+          name: r.name, state: r.state, district: r.district, block: r.block, gramPanchayat: r.gramPanchayat,
+          population: r.population, households: r.households, fhtc: r.fhtc, supplyStatus: r.supplyStatus,
+          gisBoundary: r.gisBoundary,
+        } }));
+      }
+      case 'INFRASTRUCTURE': {
+        const rows = await this.prisma.infrastructureMapping.findMany({ take, orderBy: { infrastructureId: 'asc' } });
+        return rows.map((r) => ({ id: r.id, label: r.infrastructureId, record: {
+          infrastructureId: r.infrastructureId, assetTag: r.assetTag, category: r.category,
+          sujalamBharatId: r.sujalamBharatId, externalInfraId: r.externalInfraId, mappingStatus: r.mappingStatus,
+        } }));
+      }
+    }
+  }
+
+  /** Dry-run: map one internal entity to the external payload (no writes). */
+  async mapPreview(system: string, entityType: string, id?: string) {
+    const sys = normSystem(system);
+    const et = normEntity(entityType);
+    const [mappings, entities] = await Promise.all([
+      this.fieldMappings(sys, et),
+      this.loadEntities(et, 500),
+    ]);
+    const specs: MappingSpec[] = mappings.map((m) => ({
+      internalField: m.internalField, externalField: m.externalField, transform: m.transform,
+      transformArg: m.transformArg, required: m.required, enabled: m.enabled,
+    }));
+    const entity = (id ? entities.find((e) => e.id === id) : entities[0]) ?? null;
+    if (!entity) {
+      return { system: sys, entityType: et, entity: null, mappingCount: mappings.length, internal: {}, external: {}, missingRequired: [] as string[], mock: true, disclaimer: DISCLAIMER };
+    }
+    const { external, missingRequired } = mapEntity(entity.record, specs);
+    return {
+      system: sys, entityType: et, mappingCount: mappings.length,
+      entity: { id: entity.id, label: entity.label },
+      internal: entity.record, external, missingRequired, mock: true, disclaimer: DISCLAIMER,
+    };
+  }
+
+  /** Validate every entity of a type; return a summary + the failing entities. */
+  async validationReport(system: string, entityType: string) {
+    const sys = normSystem(system);
+    const et = normEntity(entityType);
+    const [rules, entities] = await Promise.all([
+      this.validationRules(sys, et),
+      this.loadEntities(et, 1000),
+    ]);
+    const specs: ValidationRuleSpec[] = rules.map((r) => ({
+      field: r.field, ruleType: r.ruleType, param: r.param, severity: r.severity, message: r.message, enabled: r.enabled,
+    }));
+    let valid = 0, invalid = 0, withWarnings = 0;
+    const issues: Array<{ id: string; label: string; valid: boolean; errors: number; warnings: number; details: unknown[] }> = [];
+    for (const e of entities) {
+      const report = validateEntity(e.record, specs);
+      if (report.valid) valid++; else invalid++;
+      if (report.warnings.length) withWarnings++;
+      if (!report.valid || report.warnings.length) {
+        issues.push({ id: e.id, label: e.label, valid: report.valid, errors: report.errors.length, warnings: report.warnings.length, details: [...report.errors, ...report.warnings] });
+      }
+    }
+    return {
+      system: sys, entityType: et, ruleCount: rules.length,
+      summary: { total: entities.length, valid, invalid, withWarnings, readyForSync: valid },
+      issues: issues.slice(0, 200), mock: true, disclaimer: DISCLAIMER,
+    };
+  }
 }
 
 @Controller('sujalam')
@@ -81,6 +205,26 @@ export class SujalamController {
 
   @Public() @Feature('sujalam_bharat') @Get('mappings')
   mappings(@Query('entityType') entityType?: string) { return this.svc.mappings(entityType); }
+
+  @Public() @Feature('sujalam_bharat') @Get('field-mappings')
+  fieldMappings(@Query('system') system?: string, @Query('entityType') entityType?: string) {
+    return this.svc.fieldMappings(system ?? '', entityType ?? '');
+  }
+
+  @Public() @Feature('sujalam_bharat') @Get('validation-rules')
+  validationRules(@Query('system') system?: string, @Query('entityType') entityType?: string) {
+    return this.svc.validationRules(system ?? '', entityType ?? '');
+  }
+
+  @Public() @Feature('sujalam_bharat') @Get('map-preview')
+  mapPreview(@Query('system') system?: string, @Query('entityType') entityType?: string, @Query('id') id?: string) {
+    return this.svc.mapPreview(system ?? '', entityType ?? '', id);
+  }
+
+  @Public() @Feature('sujalam_bharat') @Get('validation-report')
+  validationReport(@Query('system') system?: string, @Query('entityType') entityType?: string) {
+    return this.svc.validationReport(system ?? '', entityType ?? '');
+  }
 }
 
 @Module({

@@ -814,3 +814,47 @@ model LegacyImport {
   startedAt   DateTime          @default(now())
   finishedAt  DateTime?
 }
+
+// Phase 2: declarative field/schema mapping. One row maps a single internal
+// SWATI field to a provider's external field, with an optional transform. The
+// mapping engine loads these per (externalSystem, entityType) to build the
+// external payload. Provider-agnostic so further systems slot in as rows.
+model FieldMapping {
+  id             String            @id @default(cuid())
+  externalSystem IntegrationSystem
+  entityType     String // SCHEME, SERVICE_AREA, SUJAL_GAON, INFRASTRUCTURE
+  internalField  String
+  externalField  String
+  transform      String            @default("DIRECT") // DIRECT, CONSTANT, UPPERCASE, LOWERCASE, TITLECASE, TRIM, DATE_ISO, NUMBER, BOOLEAN, MAP
+  transformArg   String? // CONSTANT value, or JSON object for MAP lookups
+  required       Boolean           @default(false)
+  enabled        Boolean           @default(true)
+  notes          String?
+  demo           Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@unique([externalSystem, entityType, internalField])
+  @@index([externalSystem, entityType])
+}
+
+// Phase 2: declarative validation rules. A null externalSystem means the rule
+// applies to every provider. The validation engine loads rules per entityType
+// (+ provider) and evaluates them against each internal entity.
+model ValidationRule {
+  id             String             @id @default(cuid())
+  externalSystem IntegrationSystem? // null = applies to all providers
+  entityType     String
+  field          String
+  ruleType       String // REQUIRED, REGEX, MIN, MAX, ENUM, LENGTH_MAX, GIS_PRESENT
+  param          String? // regex source, numeric bound, comma-separated enum, or max length
+  severity       String             @default("ERROR") // ERROR | WARNING
+  message        String
+  enabled        Boolean            @default(true)
+  demo           Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([entityType])
+  @@index([externalSystem, entityType])
+}

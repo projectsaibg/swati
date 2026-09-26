@@ -627,6 +627,8 @@ async function main() {
   await prisma.integrationProvider.deleteMany({});
   await prisma.govAuditLog.deleteMany({});
   await prisma.legacyImport.deleteMany({});
+  await prisma.fieldMapping.deleteMany({});
+  await prisma.validationRule.deleteMany({});
 
   await prisma.integrationProvider.create({
     data: {
@@ -780,7 +782,72 @@ async function main() {
       startedAt: new Date(Date.now() - 3 * 24 * 3600 * 1000), finishedAt: new Date(Date.now() - 3 * 24 * 3600 * 1000 + 120000),
     },
   });
-  console.log(`Seeded Sujalam Bharat integration (DEMO): ${schemeIds.length} schemes, ${serviceAreaIds.length} service areas, 25 villages, ${infraRows.length} assets, 2 mock providers.`);
+  // Phase 2 config: declarative field mappings (SWATI field -> external field)
+  // and validation rules. Demo config only; drives the mapping/validation
+  // preview + report endpoints. transformArg for MAP is a JSON lookup table.
+  const fmRows = [
+    // --- SUJALAM_BHARAT: SCHEME ---
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SCHEME', internalField: 'schemeName', externalField: 'scheme_name', transform: 'DIRECT', required: true },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SCHEME', internalField: 'swatiSchemeId', externalField: 'source_ref', transform: 'DIRECT', required: true },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SCHEME', internalField: 'sujalamBharatId', externalField: 'external_scheme_id', transform: 'DIRECT' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SCHEME', internalField: 'schemeType', externalField: 'scheme_type', transform: 'MAP', transformArg: JSON.stringify({ PWS: 'PIPED_WATER_SUPPLY' }) },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SCHEME', internalField: 'state', externalField: 'state_name', transform: 'CONSTANT', transformArg: 'West Bengal' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SCHEME', internalField: 'district', externalField: 'district_name', transform: 'TITLECASE', required: true },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SCHEME', internalField: 'block', externalField: 'block_name', transform: 'TITLECASE' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SCHEME', internalField: 'status', externalField: 'scheme_status', transform: 'UPPERCASE' },
+    // --- SUJALAM_BHARAT: SERVICE_AREA ---
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SERVICE_AREA', internalField: 'serviceAreaId', externalField: 'source_ref', transform: 'DIRECT', required: true },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SERVICE_AREA', internalField: 'name', externalField: 'service_area_name', transform: 'DIRECT', required: true },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SERVICE_AREA', internalField: 'district', externalField: 'district_name', transform: 'TITLECASE', required: true },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SERVICE_AREA', internalField: 'population', externalField: 'population', transform: 'NUMBER' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SERVICE_AREA', internalField: 'households', externalField: 'households', transform: 'NUMBER' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SERVICE_AREA', internalField: 'fhtc', externalField: 'fhtc_count', transform: 'NUMBER' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SERVICE_AREA', internalField: 'supplySource', externalField: 'water_source', transform: 'DIRECT' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SERVICE_AREA', internalField: 'serviceStatus', externalField: 'status', transform: 'UPPERCASE' },
+    // --- SUJALAM_BHARAT: SUJAL_GAON ---
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SUJAL_GAON', internalField: 'swatiVillageId', externalField: 'source_ref', transform: 'DIRECT', required: true },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SUJAL_GAON', internalField: 'sujalGaonId', externalField: 'sujal_gaon_id', transform: 'DIRECT' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SUJAL_GAON', internalField: 'name', externalField: 'village_name', transform: 'DIRECT', required: true },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SUJAL_GAON', internalField: 'district', externalField: 'district_name', transform: 'TITLECASE', required: true },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SUJAL_GAON', internalField: 'population', externalField: 'population', transform: 'NUMBER' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SUJAL_GAON', internalField: 'households', externalField: 'households', transform: 'NUMBER' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SUJAL_GAON', internalField: 'fhtc', externalField: 'fhtc_count', transform: 'NUMBER' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SUJAL_GAON', internalField: 'supplyStatus', externalField: 'supply_status', transform: 'UPPERCASE' },
+    // --- SUJALAM_BHARAT: INFRASTRUCTURE ---
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'INFRASTRUCTURE', internalField: 'infrastructureId', externalField: 'source_ref', transform: 'DIRECT', required: true },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'INFRASTRUCTURE', internalField: 'assetTag', externalField: 'asset_tag', transform: 'DIRECT', required: true },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'INFRASTRUCTURE', internalField: 'category', externalField: 'asset_category', transform: 'MAP', transformArg: JSON.stringify({ MOTOR_PUMP: 'PUMP' }) },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'INFRASTRUCTURE', internalField: 'sujalamBharatId', externalField: 'external_asset_id', transform: 'DIRECT' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'INFRASTRUCTURE', internalField: 'mappingStatus', externalField: 'status', transform: 'UPPERCASE' },
+    // --- JJM_1_0: INFRASTRUCTURE (legacy retrofitting inventory) ---
+    { externalSystem: 'JJM_1_0', entityType: 'INFRASTRUCTURE', internalField: 'infrastructureId', externalField: 'SWATI_INFRA_ID', transform: 'DIRECT', required: true },
+    { externalSystem: 'JJM_1_0', entityType: 'INFRASTRUCTURE', internalField: 'assetTag', externalField: 'LEGACY_ASSET_CODE', transform: 'DIRECT' },
+    { externalSystem: 'JJM_1_0', entityType: 'INFRASTRUCTURE', internalField: 'externalInfraId', externalField: 'JJM_ASSET_ID', transform: 'DIRECT', required: true },
+    { externalSystem: 'JJM_1_0', entityType: 'INFRASTRUCTURE', internalField: 'category', externalField: 'ASSET_TYPE', transform: 'DIRECT' },
+  ].map((r) => ({ ...r, demo: true }));
+  await prisma.fieldMapping.createMany({ data: fmRows as any });
+
+  const vrRows = [
+    // Provider-agnostic structural rules (externalSystem null).
+    { entityType: 'SCHEME', field: 'schemeName', ruleType: 'REQUIRED', severity: 'ERROR', message: 'Scheme name is required.' },
+    { entityType: 'SCHEME', field: 'district', ruleType: 'REQUIRED', severity: 'ERROR', message: 'District is required.' },
+    { entityType: 'SERVICE_AREA', field: 'name', ruleType: 'REQUIRED', severity: 'ERROR', message: 'Service area name is required.' },
+    { entityType: 'SERVICE_AREA', field: 'population', ruleType: 'MIN', param: '1', severity: 'WARNING', message: 'Population should be a positive number.' },
+    { entityType: 'SUJAL_GAON', field: 'swatiVillageId', ruleType: 'REQUIRED', severity: 'ERROR', message: 'SWATI village id is required.' },
+    { entityType: 'SUJAL_GAON', field: 'name', ruleType: 'REQUIRED', severity: 'ERROR', message: 'Village name is required.' },
+    { entityType: 'INFRASTRUCTURE', field: 'infrastructureId', ruleType: 'REQUIRED', severity: 'ERROR', message: 'Infrastructure id is required.' },
+    { entityType: 'INFRASTRUCTURE', field: 'assetTag', ruleType: 'REQUIRED', severity: 'ERROR', message: 'Asset tag is required.' },
+    // Sujalam Bharat provider-specific rules (mostly warnings — govt id readiness).
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SCHEME', field: 'sujalamBharatId', ruleType: 'REGEX', param: '^SB-WB-\\d+$', severity: 'WARNING', message: 'Government scheme id is missing or not in SB-WB-* format.' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SCHEME', field: 'status', ruleType: 'ENUM', param: 'ACTIVE,INACTIVE,SUSPENDED', severity: 'WARNING', message: 'Scheme status is outside the expected set.' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SERVICE_AREA', field: 'gisBoundary', ruleType: 'GIS_PRESENT', severity: 'WARNING', message: 'GIS boundary not captured for this service area.' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SUJAL_GAON', field: 'sujalamBharatId', ruleType: 'REGEX', param: '^SB-VIL-\\d+$', severity: 'WARNING', message: 'Village government id is missing or not in SB-VIL-* format.' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SUJAL_GAON', field: 'gisBoundary', ruleType: 'GIS_PRESENT', severity: 'WARNING', message: 'GIS boundary not captured for this village.' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'INFRASTRUCTURE', field: 'sujalamBharatId', ruleType: 'REGEX', param: '^SB-INF-\\d+$', severity: 'WARNING', message: 'Asset government id is missing or not in SB-INF-* format.' },
+  ].map((r) => ({ ...r, enabled: true, demo: true }));
+  await prisma.validationRule.createMany({ data: vrRows as any });
+
+  console.log(`Seeded Sujalam Bharat integration (DEMO): ${schemeIds.length} schemes, ${serviceAreaIds.length} service areas, 25 villages, ${infraRows.length} assets, 2 mock providers, ${fmRows.length} field mappings, ${vrRows.length} validation rules.`);
 
   console.log('Seed complete.');
   console.log(`Admin login: ${adminEmail}`);

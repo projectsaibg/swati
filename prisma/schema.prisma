@@ -840,6 +840,25 @@ model FieldMapping {
   @@index([externalSystem, entityType])
 }
 
+// Phase 4: RBAC role mapping. Maps a SWATI role to its government counterpart
+// and the integration capabilities it may exercise, with an optional geo-scope
+// (a district name, or "ALL"). The sync layer enforces these on top of the
+// base data.enter permission; the UI reads them to gate per-capability actions.
+model RoleMapping {
+  id             String            @id @default(cuid())
+  swatiRole      String            @unique
+  externalRole   String
+  externalSystem IntegrationSystem @default(SUJALAM_BHARAT)
+  canPush        Boolean           @default(false)
+  canPull        Boolean           @default(false)
+  canResolve     Boolean           @default(false)
+  canImport      Boolean           @default(false)
+  geoScope       String            @default("ALL") // "ALL" or a district name
+  demo           Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+}
+
 // Phase 2: declarative validation rules. A null externalSystem means the rule
 // applies to every provider. The validation engine loads rules per entityType
 // (+ provider) and evaluates them against each internal entity.

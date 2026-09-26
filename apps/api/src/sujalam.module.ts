@@ -8,10 +8,11 @@
 import { Module } from '@nestjs/common';
 import { SujalamService, SujalamController } from './sujalam';
 import { SyncService, SyncController } from './sujalam-sync';
+import { ReportService, ReportController } from './sujalam-reports';
 
 @Module({
-  providers: [SujalamService, SyncService],
-  controllers: [SujalamController, SyncController],
+  providers: [SujalamService, SyncService, ReportService],
+  controllers: [SujalamController, SyncController, ReportController],
   exports: [SujalamService],
 })
 export class SujalamModule {}

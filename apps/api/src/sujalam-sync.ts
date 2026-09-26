@@ -15,7 +15,7 @@
  * matching the rest of the app.
  */
 import {
-  BadRequestException, Body, Controller, Get, Injectable, NotFoundException, Param, Post,
+  BadRequestException, Body, Controller, ForbiddenException, Get, Injectable, NotFoundException, Param, Post,
 } from '@nestjs/common';
 import { IsIn, IsOptional } from 'class-validator';
 import { PrismaService } from './prisma.service';
@@ -37,21 +37,48 @@ class ResolveDto {
   @IsIn(['INTERNAL', 'EXTERNAL']) resolution!: 'INTERNAL' | 'EXTERNAL';
 }
 
+export interface AuthUser { email?: string; roleName?: string; permissions?: string[] }
+export interface AccessContext {
+  roleName: string | null; externalRole: string | null;
+  canPush: boolean; canPull: boolean; canResolve: boolean; canImport: boolean;
+  geoScope: string; mapped: boolean;
+}
+
 @Injectable()
 export class SyncService {
   constructor(private readonly prisma: PrismaService, private readonly sujalam: SujalamService) {}
 
+  /**
+   * Resolve the acting user's integration RBAC. Administrators (permission '*')
+   * get full access; everyone else is governed by their RoleMapping row. An
+   * unmapped role (or anonymous) gets no capabilities.
+   */
+  async resolveAccess(user?: AuthUser): Promise<AccessContext> {
+    const perms = user?.permissions ?? [];
+    if (perms.includes('*')) {
+      return { roleName: user?.roleName ?? 'Administrator', externalRole: 'State Administrator', canPush: true, canPull: true, canResolve: true, canImport: true, geoScope: 'ALL', mapped: true };
+    }
+    const none: AccessContext = { roleName: user?.roleName ?? null, externalRole: null, canPush: false, canPull: false, canResolve: false, canImport: false, geoScope: 'ALL', mapped: false };
+    if (!user?.roleName) return none;
+    const rm = await this.prisma.roleMapping.findUnique({ where: { swatiRole: user.roleName } });
+    if (!rm) return none;
+    return { roleName: user.roleName, externalRole: rm.externalRole, canPush: rm.canPush, canPull: rm.canPull, canResolve: rm.canResolve, canImport: rm.canImport, geoScope: rm.geoScope, mapped: true };
+  }
+
   // --- push ---------------------------------------------------------------
-  async push(systemIn: string, entityTypeIn: string, actor?: string) {
+  async push(systemIn: string, entityTypeIn: string, user?: AuthUser) {
     const system = normSystem(systemIn);
     const entityType = normEntity(entityTypeIn);
+    const access = await this.resolveAccess(user);
+    if (!access.canPush) throw new ForbiddenException('Your integration role is not authorized to push.');
+    const actor = user?.email ?? 'system';
     const adapter = adapterFor(system);
     if (!adapter.supportsPush || !adapter.push) {
       throw new BadRequestException(`${system} does not support push.`);
     }
 
     const [entities, mapRows, ruleRows] = await Promise.all([
-      this.sujalam.loadEntities(entityType),
+      this.sujalam.loadEntities(entityType, 500, access.geoScope),
       this.sujalam.fieldMappings(system, entityType),
       this.sujalam.validationRules(system, entityType),
     ]);
@@ -101,15 +128,18 @@ export class SyncService {
   }
 
   // --- pull ---------------------------------------------------------------
-  async pull(systemIn: string, entityTypeIn: string, actor?: string) {
+  async pull(systemIn: string, entityTypeIn: string, user?: AuthUser) {
     const system = normSystem(systemIn);
     const entityType = normEntity(entityTypeIn);
+    const access = await this.resolveAccess(user);
+    if (!access.canPull) throw new ForbiddenException('Your integration role is not authorized to pull.');
+    const actor = user?.email ?? 'system';
     const adapter = adapterFor(system);
     if (!adapter.supportsPull || !adapter.pull) {
       throw new BadRequestException(`${system} does not support pull.`);
     }
 
-    const entities = await this.sujalam.loadEntities(entityType);
+    const entities = await this.sujalam.loadEntities(entityType, 500, access.geoScope);
     const outcomes = adapter.pull(entityType, entities.map((e) => ({
       internalId: e.id, externalId: (e.record.sujalamBharatId as string) ?? null, label: e.label, fields: e.record,
     })));
@@ -145,7 +175,10 @@ export class SyncService {
   }
 
   // --- JJM 1.0 legacy import ---------------------------------------------
-  async importJjm(actor?: string) {
+  async importJjm(user?: AuthUser) {
+    const access = await this.resolveAccess(user);
+    if (!access.canImport) throw new ForbiddenException('Your integration role is not authorized to run legacy imports.');
+    const actor = user?.email ?? 'system';
     const adapter = new Jjm10MockAdapter();
     const existing = await this.prisma.infrastructureMapping.findMany({ where: { externalInfraId: { not: null } }, select: { externalInfraId: true } });
     const existingIds = existing.map((e) => e.externalInfraId!).filter(Boolean);
@@ -184,7 +217,10 @@ export class SyncService {
       });
   }
 
-  async resolveConflict(recordId: string, resolution: 'INTERNAL' | 'EXTERNAL', actor?: string) {
+  async resolveConflict(recordId: string, resolution: 'INTERNAL' | 'EXTERNAL', user?: AuthUser) {
+    const access = await this.resolveAccess(user);
+    if (!access.canResolve) throw new ForbiddenException('Your integration role is not authorized to resolve conflicts.');
+    const actor = user?.email ?? 'system';
     const rec = await this.prisma.syncRecord.findUnique({ where: { id: recordId } });
     if (!rec) throw new NotFoundException('Conflict record not found.');
     const resp = (rec.response as any) ?? {};
@@ -261,23 +297,28 @@ export class SyncController {
   @Public() @Feature('sujalam_bharat') @Get('conflicts')
   conflicts() { return this.svc.conflicts(); }
 
+  // Optional-auth: returns the current user's integration RBAC (all-false when
+  // anonymous), so the UI can gate per-capability actions.
+  @Public() @Feature('sujalam_bharat') @Get('my-access')
+  myAccess(@CurrentUser() user?: AuthUser) { return this.svc.resolveAccess(user); }
+
   @Feature('sujalam_bharat') @Perm('data.enter') @Post('sync/push')
-  push(@Body() dto: SyncDto, @CurrentUser() user?: { email?: string }) {
-    return this.svc.push(dto.system ?? '', dto.entityType ?? '', user?.email);
+  push(@Body() dto: SyncDto, @CurrentUser() user?: AuthUser) {
+    return this.svc.push(dto.system ?? '', dto.entityType ?? '', user);
   }
 
   @Feature('sujalam_bharat') @Perm('data.enter') @Post('sync/pull')
-  pull(@Body() dto: SyncDto, @CurrentUser() user?: { email?: string }) {
-    return this.svc.pull(dto.system ?? '', dto.entityType ?? '', user?.email);
+  pull(@Body() dto: SyncDto, @CurrentUser() user?: AuthUser) {
+    return this.svc.pull(dto.system ?? '', dto.entityType ?? '', user);
   }
 
   @Feature('sujalam_bharat') @Perm('data.enter') @Post('import/jjm')
-  importJjm(@CurrentUser() user?: { email?: string }) {
-    return this.svc.importJjm(user?.email);
+  importJjm(@CurrentUser() user?: AuthUser) {
+    return this.svc.importJjm(user);
   }
 
   @Feature('sujalam_bharat') @Perm('data.enter') @Post('conflicts/:id/resolve')
-  resolve(@Param('id') id: string, @Body() dto: ResolveDto, @CurrentUser() user?: { email?: string }) {
-    return this.svc.resolveConflict(id, dto.resolution, user?.email);
+  resolve(@Param('id') id: string, @Body() dto: ResolveDto, @CurrentUser() user?: AuthUser) {
+    return this.svc.resolveConflict(id, dto.resolution, user);
   }
 }

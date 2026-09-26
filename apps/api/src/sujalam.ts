@@ -101,10 +101,12 @@ export class SujalamService {
   }
 
   /** Load internal entities of a type as flat records ({ id, label, record }). */
-  async loadEntities(entityType: EntityType, take = 500): Promise<Array<{ id: string; label: string; record: Record<string, unknown> }>> {
+  async loadEntities(entityType: EntityType, take = 500, district?: string): Promise<Array<{ id: string; label: string; record: Record<string, unknown> }>> {
+    // Geo-scope: filter by district where the model carries one (infra does not).
+    const geo = district && district !== 'ALL' ? { district } : {};
     switch (entityType) {
       case 'SCHEME': {
-        const rows = await this.prisma.schemeProfile.findMany({ take, orderBy: { schemeName: 'asc' } });
+        const rows = await this.prisma.schemeProfile.findMany({ where: geo, take, orderBy: { schemeName: 'asc' } });
         return rows.map((r) => ({ id: r.id, label: r.schemeName, record: {
           schemeKey: r.schemeKey, swatiSchemeId: r.swatiSchemeId, sujalamBharatId: r.sujalamBharatId,
           schemeName: r.schemeName, schemeType: r.schemeType, state: r.state, district: r.district,
@@ -112,7 +114,7 @@ export class SujalamService {
         } }));
       }
       case 'SERVICE_AREA': {
-        const rows = await this.prisma.serviceArea.findMany({ take, orderBy: { name: 'asc' } });
+        const rows = await this.prisma.serviceArea.findMany({ where: geo, take, orderBy: { name: 'asc' } });
         return rows.map((r) => ({ id: r.id, label: r.name, record: {
           serviceAreaId: r.serviceAreaId, sujalamBharatId: r.sujalamBharatId, name: r.name, state: r.state,
           district: r.district, block: r.block, gramPanchayat: r.gramPanchayat, population: r.population,
@@ -122,7 +124,7 @@ export class SujalamService {
         } }));
       }
       case 'SUJAL_GAON': {
-        const rows = await this.prisma.sujalGaon.findMany({ take, orderBy: { name: 'asc' } });
+        const rows = await this.prisma.sujalGaon.findMany({ where: geo, take, orderBy: { name: 'asc' } });
         return rows.map((r) => ({ id: r.id, label: r.name, record: {
           sujalGaonId: r.sujalGaonId, swatiVillageId: r.swatiVillageId, sujalamBharatId: r.sujalamBharatId,
           name: r.name, state: r.state, district: r.district, block: r.block, gramPanchayat: r.gramPanchayat,

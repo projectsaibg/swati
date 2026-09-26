@@ -629,6 +629,7 @@ async function main() {
   await prisma.legacyImport.deleteMany({});
   await prisma.fieldMapping.deleteMany({});
   await prisma.validationRule.deleteMany({});
+  await prisma.roleMapping.deleteMany({});
 
   await prisma.integrationProvider.create({
     data: {
@@ -645,9 +646,20 @@ async function main() {
     },
   });
 
-  // Pick 3 distinct real schemes from the pump-house network for the profiles.
+  // Pick 3 distinct real schemes spanning districts (so the RBAC geo-scope and
+  // the district report filter are meaningful): one scheme per district first,
+  // then fill any remaining slots with further distinct schemes.
   const schemeNames: string[] = [];
-  for (const ph of PUMP_HOUSES) { if (!schemeNames.includes(ph.scheme)) schemeNames.push(ph.scheme); if (schemeNames.length >= 3) break; }
+  const seenDistricts = new Set<string>();
+  for (const ph of PUMP_HOUSES) {
+    if (schemeNames.length >= 3) break;
+    if (schemeNames.includes(ph.scheme) || seenDistricts.has(ph.district)) continue;
+    schemeNames.push(ph.scheme); seenDistricts.add(ph.district);
+  }
+  for (const ph of PUMP_HOUSES) {
+    if (schemeNames.length >= 3) break;
+    if (!schemeNames.includes(ph.scheme)) schemeNames.push(ph.scheme);
+  }
 
   const schemeIds: string[] = [];
   const schemeMapped: boolean[] = [];
@@ -868,7 +880,18 @@ async function main() {
   ].map((r) => ({ ...r, enabled: true, demo: true }));
   await prisma.validationRule.createMany({ data: vrRows as any });
 
-  console.log(`Seeded Sujalam Bharat integration (DEMO): ${schemeIds.length} schemes, ${serviceAreaIds.length} service areas, 25 villages, ${infraRows.length} assets, 2 mock providers, ${fmRows.length} field mappings, ${vrRows.length} validation rules.`);
+  // Phase 4 RBAC: map each SWATI role to a government counterpart + integration
+  // capabilities, with an optional geo-scope. Enforced by the sync layer on top
+  // of the base data.enter permission; surfaced in the Access matrix report.
+  const rmRows = [
+    { swatiRole: 'Administrator', externalRole: 'State Administrator', canPush: true, canPull: true, canResolve: true, canImport: true, geoScope: 'ALL' },
+    { swatiRole: 'Executive Engineer', externalRole: 'District Nodal Officer', canPush: true, canPull: true, canResolve: true, canImport: true, geoScope: 'ALL' },
+    { swatiRole: 'Assistant Engineer', externalRole: 'Block Coordinator', canPush: false, canPull: true, canResolve: true, canImport: false, geoScope: 'Nadia' },
+    { swatiRole: 'Field Officer', externalRole: 'Field Enumerator', canPush: false, canPull: false, canResolve: false, canImport: false, geoScope: 'Purba Medinipur' },
+  ].map((r) => ({ ...r, externalSystem: 'SUJALAM_BHARAT' as const, demo: true }));
+  await prisma.roleMapping.createMany({ data: rmRows as any });
+
+  console.log(`Seeded Sujalam Bharat integration (DEMO): ${schemeIds.length} schemes, ${serviceAreaIds.length} service areas, 25 villages, ${infraRows.length} assets, 2 mock providers, ${fmRows.length} field mappings, ${vrRows.length} validation rules, ${rmRows.length} role mappings.`);
 
   console.log('Seed complete.');
   console.log(`Admin login: ${adminEmail}`);

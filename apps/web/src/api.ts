@@ -412,11 +412,12 @@ export interface ValidationReport {
   summary: { total: number; valid: number; invalid: number; withWarnings: number; readyForSync: number };
   issues: ValidationIssueRow[]; mock: boolean; disclaimer: string;
 }
-export interface GisPoint { id: string; label: string; lat: number; lng: number; mapped: boolean }
+export interface GisPoint { id: string; label: string; category: string; lat: number; lng: number; mapped: boolean }
 export interface GisBoundary { id: string; label: string; kind: 'SERVICE_AREA' | 'SUJAL_GAON'; geojson: unknown }
 export interface SujalamGis {
   points: GisPoint[];
   boundaries: GisBoundary[];
+  byCategory: Record<string, number>;
   counts: {
     assets: number; assetsGeolocated: number;
     serviceAreas: number; serviceAreasWithBoundary: number;

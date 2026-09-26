@@ -221,13 +221,16 @@ export class SujalamService {
     ]);
     const points = infra
       .filter((a) => a.latitude != null && a.longitude != null)
-      .map((a) => ({ id: a.id, label: a.infrastructureId, lat: Number(a.latitude), lng: Number(a.longitude), mapped: !!a.sujalamBharatId }));
+      .map((a) => ({ id: a.id, label: a.infrastructureId, category: a.category, lat: Number(a.latitude), lng: Number(a.longitude), mapped: !!a.sujalamBharatId }));
     const boundaries = [
       ...areas.filter((a) => a.gisBoundary != null).map((a) => ({ id: a.id, label: a.name, kind: 'SERVICE_AREA' as const, geojson: a.gisBoundary })),
       ...villages.filter((v) => v.gisBoundary != null).map((v) => ({ id: v.id, label: v.name, kind: 'SUJAL_GAON' as const, geojson: v.gisBoundary })),
     ];
+    // Asset breakdown by category (Sujalam Bharat asset-chain types) for KPIs + filter.
+    const byCategory: Record<string, number> = {};
+    for (const a of infra) byCategory[a.category] = (byCategory[a.category] ?? 0) + 1;
     return {
-      points, boundaries,
+      points, boundaries, byCategory,
       counts: {
         assets: infra.length, assetsGeolocated: points.length,
         serviceAreas: areas.length, serviceAreasWithBoundary: areas.filter((a) => a.gisBoundary != null).length,

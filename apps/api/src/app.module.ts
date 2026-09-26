@@ -22,6 +22,7 @@ import { InstrumentsModule } from './instruments';
 import { CommandCenterModule } from './commandcenter';
 import { AccountabilityModule } from './accountability';
 import { PreventiveModule } from './preventive';
+import { SujalamModule } from './sujalam';
 import { DemoSimulator } from './simulate';
 import { FeatureGuard, HttpExceptionFilter, JwtAuthGuard, PermissionsGuard } from './common';
 import { Public } from './decorators';
@@ -59,6 +60,7 @@ export class HealthController {
     CommandCenterModule,
     AccountabilityModule,
     PreventiveModule,
+    SujalamModule,
   ],
   controllers: [HealthController],
   providers: [

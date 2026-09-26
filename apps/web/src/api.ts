@@ -221,6 +221,9 @@ export const api = {
   preventiveSummary: (f?: GeoQuery) => http.get('/preventive/summary', { params: f }).then((r) => r.data as PreventiveSummary),
   preventiveForecasts: (f?: GeoQuery & { type?: string }) => http.get('/preventive/forecasts', { params: f }).then((r) => r.data as PreventiveForecast[]),
 
+  // Sujalam Bharat integration layer
+  sujalamOverview: () => http.get('/sujalam/overview').then((r) => r.data as SujalamOverview),
+
   // Command Center
   commandCenter: () => http.get('/command-center/summary').then((r) => r.data as CommandCenterData),
 
@@ -344,6 +347,19 @@ export interface PreventiveForecast {
 export interface PreventiveSummary {
   total: number; overdue: number; due30: number; due90: number; scheduled: number;
   predictedFailures30: number; estCostAvoidedInr: number; avgConfidence: number; byType: Record<string, number>;
+}
+
+export interface SujalamOverview {
+  schemes: { total: number; mapped: number; unmapped: number };
+  serviceAreas: { total: number };
+  sujalGaon: { total: number; mapped: number; unmapped: number };
+  infrastructure: { total: number; mapped: number; unmapped: number };
+  status: Record<string, number>;
+  readinessPct: number;
+  providers: { system: string; name: string; enabled: boolean; mockMode: boolean; supportsPush: boolean; supportsPull: boolean }[];
+  lastSync: { provider: string; direction: string; state: string; at: string } | null;
+  mock: boolean;
+  disclaimer: string;
 }
 
 export interface Instrument {

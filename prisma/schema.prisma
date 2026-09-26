@@ -734,6 +734,8 @@ model InfrastructureMapping {
   serviceAreaId    String?
   sujalamBharatId  String?
   externalInfraId  String?
+  latitude         Decimal?      @db.Decimal(10, 7)
+  longitude        Decimal?      @db.Decimal(10, 7)
   mappingStatus    MappingStatus @default(NOT_MAPPED)
   demo             Boolean       @default(true)
   createdAt        DateTime      @default(now())

@@ -231,6 +231,7 @@ export const api = {
     http.get('/sujalam/map-preview', { params: { system, entityType, id } }).then((r) => r.data as MapPreview),
   sujalamValidationReport: (system: string, entityType: string) =>
     http.get('/sujalam/validation-report', { params: { system, entityType } }).then((r) => r.data as ValidationReport),
+  sujalamGis: () => http.get('/sujalam/gis').then((r) => r.data as SujalamGis),
 
   // Command Center
   commandCenter: () => http.get('/command-center/summary').then((r) => r.data as CommandCenterData),
@@ -393,6 +394,18 @@ export interface ValidationReport {
   system: string; entityType: string; ruleCount: number;
   summary: { total: number; valid: number; invalid: number; withWarnings: number; readyForSync: number };
   issues: ValidationIssueRow[]; mock: boolean; disclaimer: string;
+}
+export interface GisPoint { id: string; label: string; lat: number; lng: number; mapped: boolean }
+export interface GisBoundary { id: string; label: string; kind: 'SERVICE_AREA' | 'SUJAL_GAON'; geojson: unknown }
+export interface SujalamGis {
+  points: GisPoint[];
+  boundaries: GisBoundary[];
+  counts: {
+    assets: number; assetsGeolocated: number;
+    serviceAreas: number; serviceAreasWithBoundary: number;
+    villages: number; villagesWithBoundary: number;
+  };
+  mock: boolean; disclaimer: string;
 }
 
 export interface Instrument {

@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import {
-  SujalamOverview, FieldMappingRow, ValidationRuleRow, MapPreview, ValidationReport, api,
+  SujalamOverview, FieldMappingRow, ValidationRuleRow, MapPreview, ValidationReport, SujalamGis, api,
 } from './api';
 
 const SYS_LABEL: Record<string, string> = {
@@ -34,7 +36,7 @@ function fmtVal(v: unknown): string {
   return String(v);
 }
 
-type Tab = 'overview' | 'mapping' | 'validation';
+type Tab = 'overview' | 'mapping' | 'validation' | 'gis';
 
 export function SujalamBharat() {
   const [tab, setTab] = useState<Tab>('overview');
@@ -47,10 +49,16 @@ export function SujalamBharat() {
   const [preview, setPreview] = useState<MapPreview | null>(null);
   const [rules, setRules] = useState<ValidationRuleRow[]>([]);
   const [report, setReport] = useState<ValidationReport | null>(null);
+  const [gis, setGis] = useState<SujalamGis | null>(null);
 
   useEffect(() => {
     api.sujalamOverview().then(setOv).catch(() => setErr('Could not load Sujalam Bharat integration data.'));
   }, []);
+
+  useEffect(() => {
+    if (tab !== 'gis' || gis) return;
+    api.sujalamGis().then(setGis).catch(() => setErr('Could not load GIS data.'));
+  }, [tab, gis]);
 
   useEffect(() => {
     if (tab !== 'mapping') return;
@@ -107,7 +115,8 @@ export function SujalamBharat() {
         {tabBtn('overview', 'Overview')}
         {tabBtn('mapping', 'Field Mapping')}
         {tabBtn('validation', 'Validation')}
-        {tab !== 'overview' && (
+        {tabBtn('gis', 'GIS Map')}
+        {(tab === 'mapping' || tab === 'validation') && (
           <span style={{ display: 'inline-flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
             <select className="input" value={system} onChange={(e) => setSystem(e.target.value)}>
               {SYSTEMS.map((s) => <option key={s} value={s}>{SYS_LABEL[s]}</option>)}
@@ -122,7 +131,73 @@ export function SujalamBharat() {
       {tab === 'overview' && <OverviewTab ov={ov} />}
       {tab === 'mapping' && <MappingTab mappings={mappings} preview={preview} />}
       {tab === 'validation' && <ValidationTab rules={rules} report={report} />}
+      {tab === 'gis' && <GisTab gis={gis} />}
     </div>
+  );
+}
+
+// --- interactive Leaflet map (dark): asset points + GeoJSON boundaries -------
+function SujalamMap({ gis, height }: { gis: SujalamGis | null; height: number }) {
+  const elRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const layerRef = useRef<L.LayerGroup | null>(null);
+
+  useEffect(() => {
+    if (mapRef.current || !elRef.current) return;
+    const map = L.map(elRef.current, { center: [23.4, 88.4], zoom: 8, attributionControl: false });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+    layerRef.current = L.layerGroup().addTo(map);
+    mapRef.current = map;
+    setTimeout(() => map.invalidateSize(), 120);
+    return () => { map.remove(); mapRef.current = null; };
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current, layer = layerRef.current;
+    if (!map || !layer || !gis) return;
+    layer.clearLayers();
+    const pts: [number, number][] = [];
+    for (const b of gis.boundaries) {
+      const color = b.kind === 'SERVICE_AREA' ? '#22d3ee' : '#f5d020';
+      try {
+        const gj = L.geoJSON(b.geojson as any, { style: { color, weight: 1.5, fillColor: color, fillOpacity: 0.12 } });
+        gj.bindPopup(`${b.label} · ${b.kind === 'SERVICE_AREA' ? 'Service area' : 'Village'}`);
+        gj.addTo(layer);
+        gj.eachLayer((l: any) => { try { (l.getLatLngs()[0] as any[]).forEach((p: any) => pts.push([p.lat, p.lng])); } catch { /* ignore */ } });
+      } catch { /* skip malformed geometry */ }
+    }
+    for (const p of gis.points) {
+      pts.push([p.lat, p.lng]);
+      const cm = L.circleMarker([p.lat, p.lng], { radius: 4, color: '#fff', weight: 1, fillColor: p.mapped ? '#25c26e' : '#8a8f98', fillOpacity: 0.9 });
+      cm.bindPopup(`${p.label}${p.mapped ? ' · mapped' : ' · unmapped'}`);
+      cm.addTo(layer);
+    }
+    if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.2));
+  }, [gis]);
+
+  return <div ref={elRef} className="cc-leaflet" style={{ height }} />;
+}
+
+function GisTab({ gis }: { gis: SujalamGis | null }) {
+  const c = gis?.counts;
+  return (
+    <>
+      <section className="kpi-grid" style={{ marginBottom: 14 }}>
+        <div className="kpi"><div className="val tnum">{c ? `${c.assetsGeolocated}/${c.assets}` : '—'}</div><div className="lbl">Assets geolocated</div></div>
+        <div className="kpi"><div className="val tnum">{c ? `${c.serviceAreasWithBoundary}/${c.serviceAreas}` : '—'}</div><div className="lbl">Service-area boundaries</div></div>
+        <div className="kpi"><div className="val tnum">{c ? `${c.villagesWithBoundary}/${c.villages}` : '—'}</div><div className="lbl">Village boundaries</div></div>
+      </section>
+      <div className="panel">
+        <h3 style={{ marginTop: 0 }}>GIS map <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>· geolocated assets + service-area / village boundaries</span></h3>
+        <div className="cc-legend row" style={{ fontSize: 12, marginBottom: 10, gap: 16, flexWrap: 'wrap' }}>
+          <div><span className="dot" style={{ background: '#25c26e' }} /> Asset (mapped)</div>
+          <div><span className="dot" style={{ background: '#8a8f98' }} /> Asset (unmapped)</div>
+          <div><span className="dot" style={{ background: '#22d3ee' }} /> Service area</div>
+          <div><span className="dot" style={{ background: '#f5d020' }} /> Village</div>
+        </div>
+        <SujalamMap gis={gis} height={460} />
+      </div>
+    </>
   );
 }
 

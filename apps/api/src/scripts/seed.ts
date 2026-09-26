@@ -674,18 +674,27 @@ async function main() {
     schemeMapped.push(mapped);
   }
 
-  // 10 service areas spread across the 3 schemes.
+  // Build a small square GeoJSON polygon around a point (demo boundaries).
+  const sqBoundary = (lat: number, lng: number, d: number) => ({
+    type: 'Polygon',
+    coordinates: [[[lng - d, lat - d], [lng + d, lat - d], [lng + d, lat + d], [lng - d, lat + d], [lng - d, lat - d]]],
+  });
+
+  // 10 service areas spread across the 3 schemes. Most carry a demo GIS boundary;
+  // a couple are left without so the GIS_PRESENT validation still surfaces gaps.
   const serviceAreaIds: string[] = [];
   for (let i = 0; i < 10; i++) {
     const si = i % schemeIds.length;
     const seed = hash(`sa-${i}`);
+    const ph = PUMP_HOUSES.find((p) => p.scheme === schemeNames[si])!;
+    const hasGis = i % 5 !== 4; // leave i=4, i=9 without a boundary
     const sa = await prisma.serviceArea.create({
       data: {
         serviceAreaId: `SWATI-SA-${String(i + 1).padStart(3, '0')}`,
         schemeProfileId: schemeIds[si],
         sujalamBharatId: schemeMapped[si] ? `SB-SA-${2000 + i}` : null,
         name: `${schemeNames[si]} — Service Area ${i + 1}`,
-        district: PUMP_HOUSES.find((p) => p.scheme === schemeNames[si])!.district,
+        district: ph.district,
         population: 3000 + (seed % 7000),
         households: 600 + (seed % 1400),
         fhtc: 400 + (seed % 1000),
@@ -693,16 +702,19 @@ async function main() {
         supplySource: seed % 2 === 0 ? 'Surface (river)' : 'Ground (borewell)',
         supplyMode: 'Piped', supplyDurationHrs: 4 + (seed % 6), supplyFrequency: 'Daily',
         waterQualityStatus: 'OK', serviceStatus: 'ACTIVE',
+        gisBoundary: hasGis ? sqBoundary(ph.lat + i * 0.012, ph.lng + i * 0.012, 0.02) : undefined,
       },
     });
     serviceAreaIds.push(sa.id);
   }
 
-  // 25 Sujal Gaon villages, ~60% mapped.
+  // 25 Sujal Gaon villages, ~60% mapped; ~80% carry a demo GIS boundary.
   for (let i = 0; i < 25; i++) {
     const si = i % schemeIds.length;
     const seed = hash(`village-${i}`);
     const mapped = seed % 5 !== 0;
+    const ph = PUMP_HOUSES.find((p) => p.scheme === schemeNames[si])!;
+    const hasGis = i % 5 !== 4; // leave 5 villages without a boundary
     await prisma.sujalGaon.create({
       data: {
         sujalGaonId: mapped ? `SG-WB-${5000 + i}` : null,
@@ -711,13 +723,14 @@ async function main() {
         schemeProfileId: schemeIds[si],
         sujalamBharatId: mapped ? `SB-VIL-${6000 + i}` : null,
         name: `Village ${i + 1}`,
-        district: PUMP_HOUSES.find((p) => p.scheme === schemeNames[si])!.district,
+        district: ph.district,
         population: 800 + (seed % 2200),
         households: 150 + (seed % 350),
         fhtc: 100 + (seed % 250),
         supplyStatus: 'ACTIVE', supplyDurationHrs: 3 + (seed % 7),
         waterQualityStatus: 'OK',
         mappingStatus: mapped ? 'SYNCED' : 'NOT_MAPPED',
+        gisBoundary: hasGis ? sqBoundary(ph.lat + (i % 8) * 0.01 - 0.03, ph.lng + (i % 8) * 0.01 - 0.03, 0.008) : undefined,
       },
     });
   }
@@ -736,6 +749,8 @@ async function main() {
       schemeProfileId: si >= 0 ? schemeIds[si] : schemeIds[i % schemeIds.length],
       sujalamBharatId: mapped ? `SB-INF-${7000 + i}` : null,
       externalInfraId: mapped ? `JJM-ASSET-${8000 + i}` : null,
+      latitude: ph.lat,
+      longitude: ph.lng,
       mappingStatus: mapped ? 'SYNCED' : 'NOT_MAPPED',
       demo: true,
     });
@@ -818,7 +833,12 @@ async function main() {
     { externalSystem: 'SUJALAM_BHARAT', entityType: 'INFRASTRUCTURE', internalField: 'assetTag', externalField: 'asset_tag', transform: 'DIRECT', required: true },
     { externalSystem: 'SUJALAM_BHARAT', entityType: 'INFRASTRUCTURE', internalField: 'category', externalField: 'asset_category', transform: 'MAP', transformArg: JSON.stringify({ MOTOR_PUMP: 'PUMP' }) },
     { externalSystem: 'SUJALAM_BHARAT', entityType: 'INFRASTRUCTURE', internalField: 'sujalamBharatId', externalField: 'external_asset_id', transform: 'DIRECT' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'INFRASTRUCTURE', internalField: 'latitude', externalField: 'gps_lat', transform: 'NUMBER', required: true },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'INFRASTRUCTURE', internalField: 'longitude', externalField: 'gps_lng', transform: 'NUMBER', required: true },
     { externalSystem: 'SUJALAM_BHARAT', entityType: 'INFRASTRUCTURE', internalField: 'mappingStatus', externalField: 'status', transform: 'UPPERCASE' },
+    // GIS boundaries flow as GeoJSON on the service-area / village payloads.
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SERVICE_AREA', internalField: 'gisBoundary', externalField: 'boundary_geojson', transform: 'DIRECT' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'SUJAL_GAON', internalField: 'gisBoundary', externalField: 'boundary_geojson', transform: 'DIRECT' },
     // --- JJM_1_0: INFRASTRUCTURE (legacy retrofitting inventory) ---
     { externalSystem: 'JJM_1_0', entityType: 'INFRASTRUCTURE', internalField: 'infrastructureId', externalField: 'SWATI_INFRA_ID', transform: 'DIRECT', required: true },
     { externalSystem: 'JJM_1_0', entityType: 'INFRASTRUCTURE', internalField: 'assetTag', externalField: 'LEGACY_ASSET_CODE', transform: 'DIRECT' },
@@ -844,6 +864,7 @@ async function main() {
     { externalSystem: 'SUJALAM_BHARAT', entityType: 'SUJAL_GAON', field: 'sujalamBharatId', ruleType: 'REGEX', param: '^SB-VIL-\\d+$', severity: 'WARNING', message: 'Village government id is missing or not in SB-VIL-* format.' },
     { externalSystem: 'SUJALAM_BHARAT', entityType: 'SUJAL_GAON', field: 'gisBoundary', ruleType: 'GIS_PRESENT', severity: 'WARNING', message: 'GIS boundary not captured for this village.' },
     { externalSystem: 'SUJALAM_BHARAT', entityType: 'INFRASTRUCTURE', field: 'sujalamBharatId', ruleType: 'REGEX', param: '^SB-INF-\\d+$', severity: 'WARNING', message: 'Asset government id is missing or not in SB-INF-* format.' },
+    { externalSystem: 'SUJALAM_BHARAT', entityType: 'INFRASTRUCTURE', field: 'latitude', ruleType: 'GIS_PRESENT', severity: 'ERROR', message: 'Asset GPS location is required for government sync.' },
   ].map((r) => ({ ...r, enabled: true, demo: true }));
   await prisma.validationRule.createMany({ data: vrRows as any });
 

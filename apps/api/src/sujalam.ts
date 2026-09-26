@@ -134,7 +134,10 @@ export class SujalamService {
         const rows = await this.prisma.infrastructureMapping.findMany({ take, orderBy: { infrastructureId: 'asc' } });
         return rows.map((r) => ({ id: r.id, label: r.infrastructureId, record: {
           infrastructureId: r.infrastructureId, assetTag: r.assetTag, category: r.category,
-          sujalamBharatId: r.sujalamBharatId, externalInfraId: r.externalInfraId, mappingStatus: r.mappingStatus,
+          sujalamBharatId: r.sujalamBharatId, externalInfraId: r.externalInfraId,
+          latitude: r.latitude != null ? Number(r.latitude) : null,
+          longitude: r.longitude != null ? Number(r.longitude) : null,
+          mappingStatus: r.mappingStatus,
         } }));
       }
     }
@@ -191,6 +194,34 @@ export class SujalamService {
       issues: issues.slice(0, 200), mock: true, disclaimer: DISCLAIMER,
     };
   }
+
+  /**
+   * GIS layer for the map: geolocated infrastructure assets (points) plus the
+   * service-area and village boundaries (GeoJSON polygons) that carry one.
+   */
+  async gis() {
+    const [infra, areas, villages] = await Promise.all([
+      this.prisma.infrastructureMapping.findMany({ take: 500, orderBy: { infrastructureId: 'asc' } }),
+      this.prisma.serviceArea.findMany({ orderBy: { name: 'asc' } }),
+      this.prisma.sujalGaon.findMany({ orderBy: { name: 'asc' } }),
+    ]);
+    const points = infra
+      .filter((a) => a.latitude != null && a.longitude != null)
+      .map((a) => ({ id: a.id, label: a.infrastructureId, lat: Number(a.latitude), lng: Number(a.longitude), mapped: !!a.sujalamBharatId }));
+    const boundaries = [
+      ...areas.filter((a) => a.gisBoundary != null).map((a) => ({ id: a.id, label: a.name, kind: 'SERVICE_AREA' as const, geojson: a.gisBoundary })),
+      ...villages.filter((v) => v.gisBoundary != null).map((v) => ({ id: v.id, label: v.name, kind: 'SUJAL_GAON' as const, geojson: v.gisBoundary })),
+    ];
+    return {
+      points, boundaries,
+      counts: {
+        assets: infra.length, assetsGeolocated: points.length,
+        serviceAreas: areas.length, serviceAreasWithBoundary: areas.filter((a) => a.gisBoundary != null).length,
+        villages: villages.length, villagesWithBoundary: villages.filter((v) => v.gisBoundary != null).length,
+      },
+      mock: true, disclaimer: DISCLAIMER,
+    };
+  }
 }
 
 @Controller('sujalam')
@@ -225,6 +256,9 @@ export class SujalamController {
   validationReport(@Query('system') system?: string, @Query('entityType') entityType?: string) {
     return this.svc.validationReport(system ?? '', entityType ?? '');
   }
+
+  @Public() @Feature('sujalam_bharat') @Get('gis')
+  gis() { return this.svc.gis(); }
 }
 
 @Module({

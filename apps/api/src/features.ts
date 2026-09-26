@@ -41,7 +41,7 @@ export const FEATURE_REGISTRY: FeatureDef[] = [
   { key: 'predictive', module: 'Preventive', tier: 'QUANTUM', visibility: 'PUBLIC' },
   { key: 'chatbot', module: 'AI Assistant', tier: 'QUANTUM', visibility: 'LOGIN' },
   { key: 'digital_twin', module: 'Digital Twin', tier: 'QUANTUM', visibility: 'PUBLIC' },
-  { key: 'sujalam_bharat', module: 'Sujalam Bharat', tier: 'BASE', visibility: 'PUBLIC' },
+  { key: 'sujalam_bharat', module: 'Sujalam Bharat', tier: 'QUANTUM', visibility: 'PUBLIC' },
 ];
 
 // admin_panel is always enabled (LOGIN, admin-only) and not part of tier presets.

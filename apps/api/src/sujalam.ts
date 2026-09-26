@@ -11,7 +11,7 @@
  *  - GET /api/sujalam/providers  (PUBLIC) — configured integration providers
  *  - GET /api/sujalam/mappings   (PUBLIC) — entity mappings (optional ?entityType=)
  */
-import { Controller, Get, Injectable, Module, Query } from '@nestjs/common';
+import { Controller, Get, Injectable, Query } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { Feature, Public } from './decorators';
 import { mapEntity, validateEntity, MappingSpec, ValidationRuleSpec } from './sujalam-engine';
@@ -19,15 +19,15 @@ import { mapEntity, validateEntity, MappingSpec, ValidationRuleSpec } from './su
 const DISCLAIMER =
   'SWATI is architecturally prepared for Sujalam Bharat integration. Official production integration is subject to government API specifications, authorization, credentials, security requirements and data-sharing protocols.';
 
-type IntegrationSystem = 'SUJALAM_BHARAT' | 'JJM_1_0';
-const SYSTEMS: IntegrationSystem[] = ['SUJALAM_BHARAT', 'JJM_1_0'];
-const ENTITY_TYPES = ['SCHEME', 'SERVICE_AREA', 'SUJAL_GAON', 'INFRASTRUCTURE'] as const;
-type EntityType = (typeof ENTITY_TYPES)[number];
+export type IntegrationSystem = 'SUJALAM_BHARAT' | 'JJM_1_0';
+export const SYSTEMS: IntegrationSystem[] = ['SUJALAM_BHARAT', 'JJM_1_0'];
+export const ENTITY_TYPES = ['SCHEME', 'SERVICE_AREA', 'SUJAL_GAON', 'INFRASTRUCTURE'] as const;
+export type EntityType = (typeof ENTITY_TYPES)[number];
 
-function normSystem(s?: string): IntegrationSystem {
+export function normSystem(s?: string): IntegrationSystem {
   return SYSTEMS.includes(s as IntegrationSystem) ? (s as IntegrationSystem) : 'SUJALAM_BHARAT';
 }
-function normEntity(e?: string): EntityType {
+export function normEntity(e?: string): EntityType {
   return (ENTITY_TYPES as readonly string[]).includes(e ?? '') ? (e as EntityType) : 'SCHEME';
 }
 
@@ -101,7 +101,7 @@ export class SujalamService {
   }
 
   /** Load internal entities of a type as flat records ({ id, label, record }). */
-  private async loadEntities(entityType: EntityType, take = 500): Promise<Array<{ id: string; label: string; record: Record<string, unknown> }>> {
+  async loadEntities(entityType: EntityType, take = 500): Promise<Array<{ id: string; label: string; record: Record<string, unknown> }>> {
     switch (entityType) {
       case 'SCHEME': {
         const rows = await this.prisma.schemeProfile.findMany({ take, orderBy: { schemeName: 'asc' } });
@@ -261,9 +261,5 @@ export class SujalamController {
   gis() { return this.svc.gis(); }
 }
 
-@Module({
-  providers: [SujalamService],
-  controllers: [SujalamController],
-  exports: [SujalamService],
-})
-export class SujalamModule {}
+// The Nest module is defined in ./sujalam.module to avoid a circular import with
+// ./sujalam-sync (SyncService depends on SujalamService).

@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
-  SujalamOverview, FieldMappingRow, ValidationRuleRow, MapPreview, ValidationReport, SujalamGis, api,
+  SujalamOverview, FieldMappingRow, ValidationRuleRow, MapPreview, ValidationReport, SujalamGis,
+  SyncJobs, ConflictRow, SyncResult, ImportResult, api,
 } from './api';
+import { useAuth } from './contexts';
 
 const SYS_LABEL: Record<string, string> = {
   SUJALAM_BHARAT: 'Sujalam Bharat',
@@ -36,9 +38,10 @@ function fmtVal(v: unknown): string {
   return String(v);
 }
 
-type Tab = 'overview' | 'mapping' | 'validation' | 'gis';
+type Tab = 'overview' | 'mapping' | 'validation' | 'gis' | 'sync';
 
 export function SujalamBharat() {
+  const { user } = useAuth();
   const [tab, setTab] = useState<Tab>('overview');
   const [system, setSystem] = useState<string>('SUJALAM_BHARAT');
   const [entityType, setEntityType] = useState<string>('SCHEME');
@@ -50,6 +53,10 @@ export function SujalamBharat() {
   const [rules, setRules] = useState<ValidationRuleRow[]>([]);
   const [report, setReport] = useState<ValidationReport | null>(null);
   const [gis, setGis] = useState<SujalamGis | null>(null);
+  const [jobs, setJobs] = useState<SyncJobs | null>(null);
+  const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [actionMsg, setActionMsg] = useState('');
 
   useEffect(() => {
     api.sujalamOverview().then(setOv).catch(() => setErr('Could not load Sujalam Bharat integration data.'));
@@ -59,6 +66,34 @@ export function SujalamBharat() {
     if (tab !== 'gis' || gis) return;
     api.sujalamGis().then(setGis).catch(() => setErr('Could not load GIS data.'));
   }, [tab, gis]);
+
+  const refreshSync = () => {
+    Promise.all([api.sujalamSyncJobs(), api.sujalamConflicts()])
+      .then(([j, c]) => { setJobs(j); setConflicts(c); })
+      .catch(() => setErr('Could not load sync data.'));
+  };
+  useEffect(() => { if (tab === 'sync') refreshSync(); }, [tab]);
+
+  const runAction = async (label: string, fn: () => Promise<SyncResult | ImportResult>) => {
+    setBusy(true); setActionMsg(''); setErr('');
+    try {
+      const r = await fn();
+      const parts = Object.entries(r).filter(([k]) => !['jobId', 'batchId', 'mock', 'system', 'direction', 'entityType'].includes(k));
+      setActionMsg(`${label}: ` + parts.map(([k, v]) => `${k} ${v}`).join(', '));
+      refreshSync();
+      api.sujalamOverview().then(setOv).catch(() => {});
+    } catch {
+      setErr(`${label} failed. ${user ? 'Please try again.' : 'Sign in to run sync actions.'}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const resolve = async (id: string, resolution: 'INTERNAL' | 'EXTERNAL') => {
+    setBusy(true); setErr('');
+    try { await api.sujalamResolveConflict(id, resolution); refreshSync(); api.sujalamOverview().then(setOv).catch(() => {}); }
+    catch { setErr('Could not resolve the conflict.'); }
+    finally { setBusy(false); }
+  };
 
   useEffect(() => {
     if (tab !== 'mapping') return;
@@ -116,7 +151,8 @@ export function SujalamBharat() {
         {tabBtn('mapping', 'Field Mapping')}
         {tabBtn('validation', 'Validation')}
         {tabBtn('gis', 'GIS Map')}
-        {(tab === 'mapping' || tab === 'validation') && (
+        {tabBtn('sync', 'Sync')}
+        {(tab === 'mapping' || tab === 'validation' || tab === 'sync') && (
           <span style={{ display: 'inline-flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
             <select className="input" value={system} onChange={(e) => setSystem(e.target.value)}>
               {SYSTEMS.map((s) => <option key={s} value={s}>{SYS_LABEL[s]}</option>)}
@@ -132,7 +168,104 @@ export function SujalamBharat() {
       {tab === 'mapping' && <MappingTab mappings={mappings} preview={preview} />}
       {tab === 'validation' && <ValidationTab rules={rules} report={report} />}
       {tab === 'gis' && <GisTab gis={gis} />}
+      {tab === 'sync' && (
+        <SyncTab
+          jobs={jobs} conflicts={conflicts} busy={busy} actionMsg={actionMsg} canAct={!!user}
+          onPush={() => runAction('Push', () => api.sujalamPush(system, entityType))}
+          onPull={() => runAction('Pull', () => api.sujalamPull(system, entityType))}
+          onImport={() => runAction('JJM import', () => api.sujalamImportJjm())}
+          onResolve={resolve}
+        />
+      )}
     </div>
+  );
+}
+
+function SyncTab({ jobs, conflicts, busy, actionMsg, canAct, onPush, onPull, onImport, onResolve }: {
+  jobs: SyncJobs | null; conflicts: ConflictRow[]; busy: boolean; actionMsg: string; canAct: boolean;
+  onPush: () => void; onPull: () => void; onImport: () => void;
+  onResolve: (id: string, resolution: 'INTERNAL' | 'EXTERNAL') => void;
+}) {
+  const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleString() : '—');
+  const stateColor = (s: string) => (s === 'SUCCESS' ? 'ok' : s === 'PARTIAL' ? 'watch' : s === 'FAILED' ? 'alarm' : 'watch');
+  return (
+    <>
+      <div className="panel" style={{ marginBottom: 12 }}>
+        <h3 style={{ marginTop: 0 }}>Run sync <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>· mock bidirectional sync + legacy import</span></h3>
+        {!canAct && <div className="cc-legend row" style={{ fontSize: 12, marginBottom: 10 }}><span style={{ color: 'var(--watch)' }}>Sign in to run sync actions (public users can view history and conflicts).</span></div>}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button className="pill ok" style={{ cursor: 'pointer', padding: '8px 16px', opacity: canAct && !busy ? 1 : 0.5 }} disabled={!canAct || busy} onClick={onPush}>Push to provider →</button>
+          <button className="pill" style={{ cursor: 'pointer', padding: '8px 16px', border: '1px solid var(--line)', opacity: canAct && !busy ? 1 : 0.5 }} disabled={!canAct || busy} onClick={onPull}>← Pull from provider</button>
+          <button className="pill" style={{ cursor: 'pointer', padding: '8px 16px', border: '1px solid var(--line)', opacity: canAct && !busy ? 1 : 0.5 }} disabled={!canAct || busy} onClick={onImport}>Import from JJM 1.0</button>
+        </div>
+        {actionMsg && <p className="muted" style={{ marginBottom: 0, marginTop: 10, fontSize: 13 }}>{actionMsg}</p>}
+      </div>
+
+      <div className="panel" style={{ marginBottom: 12 }}>
+        <h3 style={{ marginTop: 0 }}>Open conflicts <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>· from pull ({conflicts.length})</span></h3>
+        <table className="tbl">
+          <thead><tr><th>Entity</th><th>Field</th><th>SWATI value</th><th>Provider value</th><th>Resolve</th></tr></thead>
+          <tbody>
+            {conflicts.map((c) => (
+              <tr key={c.id}>
+                <td>{c.label ?? c.internalEntityId} <span className="muted" style={{ fontSize: 11 }}>({c.entityType})</span></td>
+                <td className="tnum">{c.field}</td>
+                <td className="tnum">{String(c.internalValue ?? '—')}</td>
+                <td className="tnum" style={{ color: 'var(--watch)' }}>{String(c.externalValue ?? '—')}</td>
+                <td style={{ display: 'flex', gap: 6 }}>
+                  <button className="pill" style={{ cursor: canAct && !busy ? 'pointer' : 'default', border: '1px solid var(--line)', opacity: canAct && !busy ? 1 : 0.5 }} disabled={!canAct || busy} onClick={() => onResolve(c.id, 'INTERNAL')}>Keep SWATI</button>
+                  <button className="pill watch" style={{ cursor: canAct && !busy ? 'pointer' : 'default', opacity: canAct && !busy ? 1 : 0.5 }} disabled={!canAct || busy} onClick={() => onResolve(c.id, 'EXTERNAL')}>Take provider</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {conflicts.length === 0 && <p className="muted">No open conflicts. Run a pull to check for government-side changes.</p>}
+      </div>
+
+      <div className="panel" style={{ marginBottom: 12 }}>
+        <h3 style={{ marginTop: 0 }}>Sync history</h3>
+        <table className="tbl">
+          <thead><tr><th>Provider</th><th>Direction</th><th>Entity</th><th>State</th><th>OK</th><th>Failed</th><th>Conflicts/Rejected</th><th>When</th></tr></thead>
+          <tbody>
+            {(jobs?.syncJobs ?? []).map((j) => (
+              <tr key={j.id}>
+                <td>{SYS_LABEL[j.provider] ?? j.provider}</td>
+                <td className="tnum">{j.direction}</td>
+                <td className="muted">{j.entityType ?? '—'}</td>
+                <td><span className={`pill ${stateColor(j.state)}`}>{j.state}</span></td>
+                <td className="tnum" style={{ color: 'var(--ok)' }}>{j.success}</td>
+                <td className="tnum" style={{ color: j.failed ? 'var(--alarm)' : undefined }}>{j.failed}</td>
+                <td className="tnum" style={{ color: j.rejected ? 'var(--watch)' : undefined }}>{j.rejected}</td>
+                <td className="muted" style={{ fontSize: 12 }}>{fmtDate(j.startedAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {(!jobs || jobs.syncJobs.length === 0) && <p className="muted">No sync jobs yet.</p>}
+      </div>
+
+      <div className="panel">
+        <h3 style={{ marginTop: 0 }}>JJM 1.0 legacy imports</h3>
+        <table className="tbl">
+          <thead><tr><th>Batch</th><th>State</th><th>Total</th><th>Created</th><th>Linked</th><th>Skipped</th><th>When</th></tr></thead>
+          <tbody>
+            {(jobs?.legacyImports ?? []).map((l) => (
+              <tr key={l.id}>
+                <td>{l.batchLabel}</td>
+                <td><span className={`pill ${stateColor(l.state)}`}>{l.state}</span></td>
+                <td className="tnum">{l.total}</td>
+                <td className="tnum" style={{ color: 'var(--ok)' }}>{l.created}</td>
+                <td className="tnum">{l.linked}</td>
+                <td className="tnum muted">{l.skipped}</td>
+                <td className="muted" style={{ fontSize: 12 }}>{fmtDate(l.startedAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {(!jobs || jobs.legacyImports.length === 0) && <p className="muted">No legacy imports yet.</p>}
+      </div>
+    </>
   );
 }
 

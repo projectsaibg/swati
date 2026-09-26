@@ -232,6 +232,15 @@ export const api = {
   sujalamValidationReport: (system: string, entityType: string) =>
     http.get('/sujalam/validation-report', { params: { system, entityType } }).then((r) => r.data as ValidationReport),
   sujalamGis: () => http.get('/sujalam/gis').then((r) => r.data as SujalamGis),
+  sujalamSyncJobs: () => http.get('/sujalam/sync/jobs').then((r) => r.data as SyncJobs),
+  sujalamConflicts: () => http.get('/sujalam/conflicts').then((r) => r.data as ConflictRow[]),
+  sujalamPush: (system: string, entityType: string) =>
+    http.post('/sujalam/sync/push', { system, entityType }).then((r) => r.data as SyncResult),
+  sujalamPull: (system: string, entityType: string) =>
+    http.post('/sujalam/sync/pull', { system, entityType }).then((r) => r.data as SyncResult),
+  sujalamImportJjm: () => http.post('/sujalam/import/jjm', {}).then((r) => r.data as ImportResult),
+  sujalamResolveConflict: (id: string, resolution: 'INTERNAL' | 'EXTERNAL') =>
+    http.post(`/sujalam/conflicts/${id}/resolve`, { resolution }).then((r) => r.data as { id: string; resolved: boolean; resolution: string }),
 
   // Command Center
   commandCenter: () => http.get('/command-center/summary').then((r) => r.data as CommandCenterData),
@@ -406,6 +415,25 @@ export interface SujalamGis {
     villages: number; villagesWithBoundary: number;
   };
   mock: boolean; disclaimer: string;
+}
+export interface SyncResult {
+  jobId: string; direction: string; system: string; entityType: string; total: number;
+  success?: number; failed?: number; rejected?: number; matched?: number; conflicts?: number;
+  state: string; mock: boolean;
+}
+export interface ImportResult { batchId: string; total: number; created: number; linked: number; skipped: number; mock: boolean }
+export interface SyncJobRow {
+  id: string; provider: string; direction: string; entityType: string | null; state: string;
+  total: number; success: number; failed: number; rejected: number; startedAt: string; finishedAt: string | null;
+}
+export interface LegacyImportRow {
+  id: string; source: string; batchLabel: string; state: string; total: number;
+  created: number; linked: number; skipped: number; startedAt: string;
+}
+export interface SyncJobs { syncJobs: SyncJobRow[]; legacyImports: LegacyImportRow[] }
+export interface ConflictRow {
+  id: string; entityType: string; internalEntityId: string | null; externalEntityId: string | null;
+  label: string | null; field: string | null; internalValue: unknown; externalValue: unknown; ts: string;
 }
 
 export interface Instrument {

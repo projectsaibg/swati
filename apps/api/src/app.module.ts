@@ -22,7 +22,7 @@ import { InstrumentsModule } from './instruments';
 import { CommandCenterModule } from './commandcenter';
 import { AccountabilityModule } from './accountability';
 import { PreventiveModule } from './preventive';
-import { SujalamModule } from './sujalam';
+import { SujalamModule } from './sujalam.module';
 import { DemoSimulator } from './simulate';
 import { FeatureGuard, HttpExceptionFilter, JwtAuthGuard, PermissionsGuard } from './common';
 import { Public } from './decorators';

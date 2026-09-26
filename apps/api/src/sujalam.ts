@@ -13,8 +13,9 @@
  */
 import { Controller, Get, Injectable, Query } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
-import { Feature, Public } from './decorators';
+import { CurrentUser, Feature, Public } from './decorators';
 import { mapEntity, validateEntity, MappingSpec, ValidationRuleSpec } from './sujalam-engine';
+import { redactRecord, isPublicField, classificationSummary } from './sujalam-classification';
 
 const DISCLAIMER =
   'SWATI is architecturally prepared for Sujalam Bharat integration. Official production integration is subject to government API specifications, authorization, credentials, security requirements and data-sharing protocols.';
@@ -145,8 +146,9 @@ export class SujalamService {
     }
   }
 
-  /** Dry-run: map one internal entity to the external payload (no writes). */
-  async mapPreview(system: string, entityType: string, id?: string) {
+  /** Dry-run: map one internal entity to the external payload (no writes).
+   *  Non-PUBLIC fields are redacted for anonymous viewers (data classification). */
+  async mapPreview(system: string, entityType: string, id?: string, authed = false) {
     const sys = normSystem(system);
     const et = normEntity(entityType);
     const [mappings, entities] = await Promise.all([
@@ -159,14 +161,24 @@ export class SujalamService {
     }));
     const entity = (id ? entities.find((e) => e.id === id) : entities[0]) ?? null;
     if (!entity) {
-      return { system: sys, entityType: et, entity: null, mappingCount: mappings.length, internal: {}, external: {}, missingRequired: [] as string[], mock: true, disclaimer: DISCLAIMER };
+      return { system: sys, entityType: et, entity: null, mappingCount: mappings.length, internal: {}, external: {}, missingRequired: [] as string[], redactedFields: [] as string[], mock: true, disclaimer: DISCLAIMER };
     }
     const { external, missingRequired } = mapEntity(entity.record, specs);
+    // Redact non-PUBLIC fields (household-level counts, demographics) for public viewers.
+    const { record: internal, redactedFields } = redactRecord(entity.record, authed);
+    if (!authed) {
+      for (const m of mappings) if (!isPublicField(m.internalField)) external[m.externalField] = null;
+    }
     return {
       system: sys, entityType: et, mappingCount: mappings.length,
       entity: { id: entity.id, label: entity.label },
-      internal: entity.record, external, missingRequired, mock: true, disclaimer: DISCLAIMER,
+      internal, external, missingRequired, redactedFields, mock: true, disclaimer: DISCLAIMER,
     };
+  }
+
+  /** Field classification summary (which fields are redacted from public reads). */
+  classification() {
+    return classificationSummary();
   }
 
   /** Validate every entity of a type; return a summary + the failing entities. */
@@ -209,13 +221,16 @@ export class SujalamService {
     ]);
     const points = infra
       .filter((a) => a.latitude != null && a.longitude != null)
-      .map((a) => ({ id: a.id, label: a.infrastructureId, lat: Number(a.latitude), lng: Number(a.longitude), mapped: !!a.sujalamBharatId }));
+      .map((a) => ({ id: a.id, label: a.infrastructureId, category: a.category, lat: Number(a.latitude), lng: Number(a.longitude), mapped: !!a.sujalamBharatId }));
     const boundaries = [
       ...areas.filter((a) => a.gisBoundary != null).map((a) => ({ id: a.id, label: a.name, kind: 'SERVICE_AREA' as const, geojson: a.gisBoundary })),
       ...villages.filter((v) => v.gisBoundary != null).map((v) => ({ id: v.id, label: v.name, kind: 'SUJAL_GAON' as const, geojson: v.gisBoundary })),
     ];
+    // Asset breakdown by category (Sujalam Bharat asset-chain types) for KPIs + filter.
+    const byCategory: Record<string, number> = {};
+    for (const a of infra) byCategory[a.category] = (byCategory[a.category] ?? 0) + 1;
     return {
-      points, boundaries,
+      points, boundaries, byCategory,
       counts: {
         assets: infra.length, assetsGeolocated: points.length,
         serviceAreas: areas.length, serviceAreasWithBoundary: areas.filter((a) => a.gisBoundary != null).length,
@@ -250,9 +265,12 @@ export class SujalamController {
   }
 
   @Public() @Feature('sujalam_bharat') @Get('map-preview')
-  mapPreview(@Query('system') system?: string, @Query('entityType') entityType?: string, @Query('id') id?: string) {
-    return this.svc.mapPreview(system ?? '', entityType ?? '', id);
+  mapPreview(@Query('system') system?: string, @Query('entityType') entityType?: string, @Query('id') id?: string, @CurrentUser() user?: { email?: string }) {
+    return this.svc.mapPreview(system ?? '', entityType ?? '', id, !!user);
   }
+
+  @Public() @Feature('sujalam_bharat') @Get('classification')
+  classification() { return this.svc.classification(); }
 
   @Public() @Feature('sujalam_bharat') @Get('validation-report')
   validationReport(@Query('system') system?: string, @Query('entityType') entityType?: string) {

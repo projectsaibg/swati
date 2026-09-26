@@ -4,12 +4,28 @@ import 'leaflet/dist/leaflet.css';
 import {
   SujalamOverview, FieldMappingRow, ValidationRuleRow, MapPreview, ValidationReport, SujalamGis,
   SyncJobs, ConflictRow, SyncResult, ImportResult, MyAccess,
-  ReadinessReport, SyncActivityReport, JjmMigrationReport, RoleMappingRow, api,
+  ReadinessReport, SyncActivityReport, JjmMigrationReport, RoleMappingRow, ClassificationSummary, api,
 } from './api';
 import { useAuth } from './contexts';
 
+function classify(field: string, cls: ClassificationSummary | null): 'PUBLIC' | 'INTERNAL' | 'SENSITIVE' {
+  if (!cls) return 'PUBLIC';
+  if (cls.sensitive.includes(field)) return 'SENSITIVE';
+  if (cls.internal.includes(field)) return 'INTERNAL';
+  return 'PUBLIC';
+}
+const CLASS_PILL: Record<string, string> = { PUBLIC: '', INTERNAL: 'watch', SENSITIVE: 'alarm' };
+
 const DISTRICTS = ['ALL', 'Nadia', 'Purba Medinipur'];
 type ReportType = 'readiness' | 'sync-activity' | 'jjm-migration' | 'access-matrix';
+
+// The official Sujalam Bharat user types (from the public app's "Select User type"),
+// shown for reference in the access matrix so SWATI roles map onto real roles.
+const OFFICIAL_USER_TYPES = [
+  'NJJM User', 'State Level Officer', 'District Level Officer', 'Divisional Office',
+  'State Level Link Officer', 'District Level Link Officer', 'Third Party Inspection Agency User',
+  'Designated Implementing Agency Nodal',
+];
 
 const SYS_LABEL: Record<string, string> = {
   SUJALAM_BHARAT: 'Sujalam Bharat',
@@ -68,9 +84,11 @@ export function SujalamBharat() {
   const [syncActivity, setSyncActivity] = useState<SyncActivityReport | null>(null);
   const [jjmReport, setJjmReport] = useState<JjmMigrationReport | null>(null);
   const [roleMappings, setRoleMappings] = useState<RoleMappingRow[]>([]);
+  const [classification, setClassification] = useState<ClassificationSummary | null>(null);
 
   useEffect(() => {
     api.sujalamOverview().then(setOv).catch(() => setErr('Could not load Sujalam Bharat integration data.'));
+    api.sujalamClassification().then(setClassification).catch(() => {});
   }, []);
 
   // RBAC: resolve the current user's integration capabilities (re-runs on login).
@@ -189,7 +207,7 @@ export function SujalamBharat() {
       </div>
 
       {tab === 'overview' && <OverviewTab ov={ov} />}
-      {tab === 'mapping' && <MappingTab mappings={mappings} preview={preview} />}
+      {tab === 'mapping' && <MappingTab mappings={mappings} preview={preview} classification={classification} authed={!!user} />}
       {tab === 'validation' && <ValidationTab rules={rules} report={report} />}
       {tab === 'gis' && <GisTab gis={gis} />}
       {tab === 'sync' && (
@@ -446,6 +464,13 @@ function ReportsTab({ reportType, setReportType, district, setDistrict, readines
             </tbody>
           </table>
           {roleMappings.length === 0 && <p className="muted">No role mappings configured.</p>}
+          <div style={{ marginTop: 14 }}>
+            <div className="ccp-h" style={{ marginBottom: 8 }}>Official Sujalam Bharat user types</div>
+            <div className="cc-legend row" style={{ fontSize: 12, flexWrap: 'wrap', gap: 8 }}>
+              {OFFICIAL_USER_TYPES.map((t) => <span key={t} className="pill" style={{ background: 'transparent', border: '1px solid var(--line)', color: 'var(--ink)' }}>{t}</span>)}
+            </div>
+            <p className="muted" style={{ marginTop: 8, marginBottom: 0, fontSize: 12 }}>Reference from the public Sujalam Bharat app. SWATI roles above map onto these government roles.</p>
+          </div>
         </div>
       )}
     </>
@@ -453,7 +478,7 @@ function ReportsTab({ reportType, setReportType, district, setDistrict, readines
 }
 
 // --- interactive Leaflet map (dark): asset points + GeoJSON boundaries -------
-function SujalamMap({ gis, height }: { gis: SujalamGis | null; height: number }) {
+function SujalamMap({ gis, height, visibleCats, search }: { gis: SujalamGis | null; height: number; visibleCats: Set<string>; search: string }) {
   const elRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const layerRef = useRef<L.LayerGroup | null>(null);
@@ -472,6 +497,7 @@ function SujalamMap({ gis, height }: { gis: SujalamGis | null; height: number })
     const map = mapRef.current, layer = layerRef.current;
     if (!map || !layer || !gis) return;
     layer.clearLayers();
+    const q = search.trim().toLowerCase();
     const pts: [number, number][] = [];
     for (const b of gis.boundaries) {
       const color = b.kind === 'SERVICE_AREA' ? '#22d3ee' : '#f5d020';
@@ -483,23 +509,40 @@ function SujalamMap({ gis, height }: { gis: SujalamGis | null; height: number })
       } catch { /* skip malformed geometry */ }
     }
     for (const p of gis.points) {
+      if (!visibleCats.has(p.category)) continue;
+      if (q && !(`${p.label} ${p.category}`.toLowerCase().includes(q))) continue;
       pts.push([p.lat, p.lng]);
       const cm = L.circleMarker([p.lat, p.lng], { radius: 4, color: '#fff', weight: 1, fillColor: p.mapped ? '#25c26e' : '#8a8f98', fillOpacity: 0.9 });
-      cm.bindPopup(`${p.label}${p.mapped ? ' · mapped' : ' · unmapped'}`);
+      cm.bindPopup(`${p.label} · ${p.category}${p.mapped ? ' · mapped' : ' · unmapped'}`);
       cm.addTo(layer);
     }
     if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.2));
-  }, [gis]);
+  }, [gis, visibleCats, search]);
 
   return <div ref={elRef} className="cc-leaflet" style={{ height }} />;
 }
 
 function GisTab({ gis }: { gis: SujalamGis | null }) {
   const c = gis?.counts;
+  const categories = gis ? Object.keys(gis.byCategory).sort() : [];
+  const [visibleCats, setVisibleCats] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
+  const [panelOpen, setPanelOpen] = useState(true);
+  // Default: all categories visible once the data (and its category set) arrives.
+  useEffect(() => { if (categories.length) setVisibleCats(new Set(categories)); }, [gis]);
+
+  const toggle = (cat: string) => setVisibleCats((prev) => {
+    const next = new Set(prev);
+    if (next.has(cat)) next.delete(cat); else next.add(cat);
+    return next;
+  });
+  const allOn = categories.length > 0 && categories.every((c2) => visibleCats.has(c2));
+
   return (
     <>
       <section className="kpi-grid" style={{ marginBottom: 14 }}>
         <div className="kpi"><div className="val tnum">{c ? `${c.assetsGeolocated}/${c.assets}` : '—'}</div><div className="lbl">Assets geolocated</div></div>
+        <div className="kpi"><div className="val tnum">{c ? c.assets : '—'}</div><div className="lbl">Asset categories: {categories.length || '—'}</div></div>
         <div className="kpi"><div className="val tnum">{c ? `${c.serviceAreasWithBoundary}/${c.serviceAreas}` : '—'}</div><div className="lbl">Service-area boundaries</div></div>
         <div className="kpi"><div className="val tnum">{c ? `${c.villagesWithBoundary}/${c.villages}` : '—'}</div><div className="lbl">Village boundaries</div></div>
       </section>
@@ -511,7 +554,31 @@ function GisTab({ gis }: { gis: SujalamGis | null }) {
           <div><span className="dot" style={{ background: '#22d3ee' }} /> Service area</div>
           <div><span className="dot" style={{ background: '#f5d020' }} /> Village</div>
         </div>
-        <SujalamMap gis={gis} height={460} />
+        {/* Map + top-left asset filter/search overlay (mirrors the Sujalam Bharat "View All Assets" panel). */}
+        <div style={{ position: 'relative' }}>
+          <SujalamMap gis={gis} height={480} visibleCats={visibleCats} search={search} />
+          <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 1000, width: panelOpen ? 250 : 'auto', background: 'var(--surface, #10141c)', border: '1px solid var(--line, #2a2a3a)', borderRadius: 8, boxShadow: '0 2px 10px rgba(0,0,0,.35)', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 8px', gap: 8, borderBottom: panelOpen ? '1px solid var(--line, #2a2a3a)' : 'none' }}>
+              <strong style={{ fontSize: 12 }}>{panelOpen ? 'Assets' : ''}</strong>
+              <button className="pill" style={{ cursor: 'pointer', border: '1px solid var(--line)', background: 'transparent', color: 'var(--ink)', padding: '2px 8px' }} onClick={() => setPanelOpen((o) => !o)} title={panelOpen ? 'Collapse' : 'Expand'}>{panelOpen ? '‹' : '›'}</button>
+            </div>
+            {panelOpen && (
+              <div style={{ padding: 8, maxHeight: 320, overflowY: 'auto' }}>
+                <input className="input" style={{ width: '100%', boxSizing: 'border-box', marginBottom: 8, padding: '6px 8px', fontSize: 12 }} placeholder="Search assets…" value={search} onChange={(e) => setSearch(e.target.value)} />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 6, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={allOn} onChange={() => setVisibleCats(allOn ? new Set() : new Set(categories))} /> <strong>All asset types</strong>
+                </label>
+                {categories.map((cat) => (
+                  <label key={cat} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 4, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={visibleCats.has(cat)} onChange={() => toggle(cat)} />
+                    <span style={{ flex: 1 }}>{cat}</span>
+                    <span className="muted">{gis?.byCategory[cat]}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </>
   );
@@ -568,17 +635,20 @@ function OverviewTab({ ov }: { ov: SujalamOverview | null }) {
   );
 }
 
-function MappingTab({ mappings, preview }: { mappings: FieldMappingRow[]; preview: MapPreview | null }) {
+function MappingTab({ mappings, preview, classification, authed }: { mappings: FieldMappingRow[]; preview: MapPreview | null; classification: ClassificationSummary | null; authed: boolean }) {
   return (
     <>
       <div className="panel" style={{ marginBottom: 12 }}>
         <h3 style={{ marginTop: 0 }}>Field mapping <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>· SWATI field → external field</span></h3>
         <table className="tbl">
-          <thead><tr><th>Internal field</th><th></th><th>External field</th><th>Transform</th><th>Required</th></tr></thead>
+          <thead><tr><th>Internal field</th><th>Class</th><th></th><th>External field</th><th>Transform</th><th>Required</th></tr></thead>
           <tbody>
-            {mappings.map((m) => (
+            {mappings.map((m) => {
+              const cls = classify(m.internalField, classification);
+              return (
               <tr key={m.id}>
                 <td className="tnum">{m.internalField}</td>
+                <td>{cls === 'PUBLIC' ? <span className="muted" style={{ fontSize: 11 }}>public</span> : <span className={`pill ${CLASS_PILL[cls]}`} style={{ fontSize: 10 }}>{cls}</span>}</td>
                 <td className="muted">→</td>
                 <td className="tnum">{m.externalField}</td>
                 <td>
@@ -587,10 +657,16 @@ function MappingTab({ mappings, preview }: { mappings: FieldMappingRow[]; previe
                 </td>
                 <td>{m.required ? <span className="pill watch">required</span> : <span className="muted">optional</span>}</td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
         {mappings.length === 0 && <p className="muted">No field mappings configured for this provider + entity type.</p>}
+        {classification && (
+          <p className="muted" style={{ marginTop: 8, marginBottom: 0, fontSize: 12 }}>
+            <span className="pill alarm" style={{ fontSize: 10 }}>SENSITIVE</span> household-level and <span className="pill watch" style={{ fontSize: 10 }}>INTERNAL</span> demographic fields are redacted from public responses. {classification.note}
+          </p>
+        )}
       </div>
 
       <div className="panel">
@@ -598,6 +674,11 @@ function MappingTab({ mappings, preview }: { mappings: FieldMappingRow[]; previe
           Payload preview
           {preview?.entity && <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}> · {preview.entity.label}</span>}
         </h3>
+        {!authed && preview?.redactedFields && preview.redactedFields.length > 0 && (
+          <div className="cc-legend row" style={{ fontSize: 12, marginBottom: 10 }}>
+            <span style={{ color: 'var(--watch)' }}>Redacted for public view: {preview.redactedFields.join(', ')} — sign in to reveal.</span>
+          </div>
+        )}
         {preview?.missingRequired && preview.missingRequired.length > 0 && (
           <div className="cc-legend row" style={{ fontSize: 12, marginBottom: 10 }}>
             <span style={{ color: 'var(--alarm)' }}>Missing required: {preview.missingRequired.join(', ')}</span>

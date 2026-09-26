@@ -247,6 +247,7 @@ export const api = {
   sujalamSyncActivity: () => http.get('/sujalam/reports/sync-activity').then((r) => r.data as SyncActivityReport),
   sujalamJjmMigration: () => http.get('/sujalam/reports/jjm-migration').then((r) => r.data as JjmMigrationReport),
   sujalamRoleMappings: () => http.get('/sujalam/role-mappings').then((r) => r.data as RoleMappingRow[]),
+  sujalamClassification: () => http.get('/sujalam/classification').then((r) => r.data as ClassificationSummary),
 
   // Command Center
   commandCenter: () => http.get('/command-center/summary').then((r) => r.data as CommandCenterData),
@@ -399,8 +400,9 @@ export interface MapPreview {
   system: string; entityType: string; mappingCount: number;
   entity: { id: string; label: string } | null;
   internal: Record<string, unknown>; external: Record<string, unknown>;
-  missingRequired: string[]; mock: boolean; disclaimer: string;
+  missingRequired: string[]; redactedFields: string[]; mock: boolean; disclaimer: string;
 }
+export interface ClassificationSummary { sensitive: string[]; internal: string[]; note: string }
 export interface ValidationIssueRow {
   id: string; label: string; valid: boolean; errors: number; warnings: number;
   details: { field: string; ruleType: string; severity: string; message: string }[];
@@ -410,11 +412,12 @@ export interface ValidationReport {
   summary: { total: number; valid: number; invalid: number; withWarnings: number; readyForSync: number };
   issues: ValidationIssueRow[]; mock: boolean; disclaimer: string;
 }
-export interface GisPoint { id: string; label: string; lat: number; lng: number; mapped: boolean }
+export interface GisPoint { id: string; label: string; category: string; lat: number; lng: number; mapped: boolean }
 export interface GisBoundary { id: string; label: string; kind: 'SERVICE_AREA' | 'SUJAL_GAON'; geojson: unknown }
 export interface SujalamGis {
   points: GisPoint[];
   boundaries: GisBoundary[];
+  byCategory: Record<string, number>;
   counts: {
     assets: number; assetsGeolocated: number;
     serviceAreas: number; serviceAreasWithBoundary: number;

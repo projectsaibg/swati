@@ -159,6 +159,66 @@ export class CommandCenterService {
       updatedAt: new Date().toISOString(),
     };
   }
+
+  /**
+   * Command-in-chief view: red-flags / alerts grouped by location & DMA with the
+   * responsible personnel and the action taken, plus a directory (phone book) for
+   * one-touch call / video conference. Personnel contacts are DEMO data (there is
+   * no personnel model yet); wire to a real directory later.
+   */
+  async command() {
+    const sites = await this.prisma.site.findMany({
+      where: { kind: 'PUMP_STATION' },
+      select: { name: true, district: true, code: true, assets: { where: { type: 'MOTOR_PUMP' }, select: { status: true } } },
+    });
+    const distByName = new Map(sites.map((s) => [s.name, s.district ?? '—']));
+    const faultStations = sites.filter((s) => s.assets.some((a) => a.status === 'FAULT'));
+
+    const wos = await this.prisma.workOrder.findMany({
+      where: { status: { in: ['OPEN', 'IN_PROGRESS'] }, priority: { in: ['CRITICAL', 'HIGH'] } },
+      orderBy: [{ priority: 'asc' }, { dueAt: 'asc' }], take: 40,
+      select: { code: true, title: true, siteName: true, status: true, priority: true, dueAt: true },
+    });
+
+    // DEMO directory (phone book). No personnel model yet — clearly demo contacts.
+    const directory = [
+      { name: 'State Control Room', role: 'Command Centre (24x7)', area: 'State', phone: '1916', email: 'control.room@swati.demo' },
+      { name: 'Er. A. Executive', role: 'Executive Engineer', area: 'Nadia', phone: '+91-90000-10001', email: 'ee.nadia@swati.demo' },
+      { name: 'Er. B. Assistant', role: 'Assistant Engineer', area: 'Nadia', phone: '+91-90000-10002', email: 'ae.nadia@swati.demo' },
+      { name: 'S. Field Officer', role: 'Field Officer', area: 'Nadia', phone: '+91-90000-10003', email: 'fo.nadia@swati.demo' },
+      { name: 'Er. C. Executive', role: 'Executive Engineer', area: 'Purba Medinipur', phone: '+91-90000-20001', email: 'ee.pm@swati.demo' },
+      { name: 'Er. D. Assistant', role: 'Assistant Engineer', area: 'Purba Medinipur', phone: '+91-90000-20002', email: 'ae.pm@swati.demo' },
+      { name: 'T. Field Officer', role: 'Field Officer', area: 'Purba Medinipur', phone: '+91-90000-20003', email: 'fo.pm@swati.demo' },
+    ];
+    const officerFor = (area: string) =>
+      directory.find((o) => o.area === area && o.role === 'Assistant Engineer') ?? directory[0];
+
+    type Flag = { id: string; area: string; dma: string; severity: string; title: string; status: string; due: string | null; personnel: typeof directory[number] };
+    const redFlags: Flag[] = [];
+    for (const s of faultStations) {
+      const area = s.district ?? '—';
+      redFlags.push({ id: `fault-${s.code}`, area, dma: s.name.split(' — ')[0].slice(0, 40), severity: 'CRITICAL', title: 'Pump / motor fault detected', status: 'Crew dispatched', due: null, personnel: officerFor(area) });
+    }
+    for (const w of wos) {
+      const area = distByName.get(w.siteName ?? '') ?? '—';
+      redFlags.push({
+        id: `wo-${w.code}`, area, dma: (w.siteName ?? w.code).split(' — ')[0].slice(0, 40),
+        severity: w.priority === 'CRITICAL' ? 'CRITICAL' : 'HIGH', title: w.title,
+        status: w.status === 'IN_PROGRESS' ? 'In progress' : 'Open · assigned',
+        due: w.dueAt ? new Date(w.dueAt).toLocaleDateString() : null, personnel: officerFor(area),
+      });
+    }
+
+    const byDistrict: Record<string, number> = {};
+    const bySeverity: Record<string, number> = {};
+    for (const f of redFlags) { byDistrict[f.area] = (byDistrict[f.area] ?? 0) + 1; bySeverity[f.severity] = (bySeverity[f.severity] ?? 0) + 1; }
+
+    return {
+      redFlags: redFlags.slice(0, 60), byDistrict, bySeverity, total: redFlags.length,
+      directory, mock: true,
+      disclaimer: 'Personnel contacts are demonstration data. Call / video-conference actions are UI-only pending telephony/VC integration.',
+    };
+  }
 }
 
 @Controller('command-center')
@@ -167,6 +227,9 @@ export class CommandCenterController {
 
   @Public() @Feature('command_center') @Get('summary')
   summary() { return this.svc.summary(); }
+
+  @Public() @Feature('command_center') @Get('command')
+  command() { return this.svc.command(); }
 }
 
 @Module({

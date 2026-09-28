@@ -253,6 +253,7 @@ export const api = {
 
   // Command Center
   commandCenter: () => http.get('/command-center/summary').then((r) => r.data as CommandCenterData),
+  commandCenterCommand: () => http.get('/command-center/command').then((r) => r.data as CommandView),
 
   // Field Instruments
   instrumentSummary: (f?: GeoQuery) => http.get('/instruments/summary', { params: f }).then((r) => r.data as InstrumentSummary),
@@ -500,6 +501,16 @@ export interface Instrument {
 }
 export interface InstrumentSummary {
   total: number; byType: Record<string, number>; online: number; offline: number;
+}
+
+export interface DirectoryContact { name: string; role: string; area: string; phone: string; email: string }
+export interface RedFlag {
+  id: string; area: string; dma: string; severity: string; title: string; status: string;
+  due: string | null; personnel: DirectoryContact;
+}
+export interface CommandView {
+  redFlags: RedFlag[]; byDistrict: Record<string, number>; bySeverity: Record<string, number>;
+  total: number; directory: DirectoryContact[]; mock: boolean; disclaimer: string;
 }
 
 export interface CommandCenterData {

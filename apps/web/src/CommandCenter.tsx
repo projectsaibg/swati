@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { CommandCenterData, api } from './api';
+import { CommandCenterData, CommandView, RedFlag, DirectoryContact, api } from './api';
 import { AxisChart } from './charts';
 import { Icon } from './icons';
 
@@ -145,11 +145,98 @@ function LeafMap({ markers, height, fit }: { markers: Marker[]; height: number; 
   return <div ref={elRef} className="cc-leaflet" style={{ height }} />;
 }
 
+type CcTab = 'operations' | 'command' | 'directory';
+
+const sevPill = (s: string) => (s === 'CRITICAL' ? 'critical' : s === 'HIGH' ? 'alarm' : 'watch');
+
+// Command & Control: red-flags / alerts by location & DMA with responsible
+// personnel and the action taken; a state/central head's single picture.
+function CommandControlView({ cmd }: { cmd: CommandView | null }) {
+  const areas = cmd ? Object.keys(cmd.byDistrict).sort() : [];
+  return (
+    <>
+      <section className="kpi-grid" style={{ marginBottom: 14 }}>
+        <div className="kpi"><div className="val tnum" style={{ color: 'var(--alarm)' }}>{cmd ? cmd.total : '—'}</div><div className="lbl">Open red flags</div></div>
+        <div className="kpi"><div className="val tnum" style={{ color: 'var(--critical)' }}>{cmd ? (cmd.bySeverity['CRITICAL'] ?? 0) : '—'}</div><div className="lbl">Critical</div></div>
+        <div className="kpi"><div className="val tnum" style={{ color: 'var(--alarm)' }}>{cmd ? (cmd.bySeverity['HIGH'] ?? 0) : '—'}</div><div className="lbl">High</div></div>
+        <div className="kpi"><div className="val tnum">{areas.length || '—'}</div><div className="lbl">Districts affected</div></div>
+      </section>
+      <div className="panel">
+        <div className="ccp-h">Red flags by location &amp; DMA <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>· with responsible officer &amp; action taken</span></div>
+        <table className="tbl">
+          <thead><tr><th>Severity</th><th>District</th><th>DMA / Location</th><th>Issue</th><th>Action taken</th><th>Responsible</th><th>Contact</th></tr></thead>
+          <tbody>
+            {(cmd?.redFlags ?? []).map((f: RedFlag) => (
+              <tr key={f.id}>
+                <td><span className={`pill ${sevPill(f.severity)}`}>{f.severity}</span></td>
+                <td>{f.area}</td>
+                <td>{f.dma}</td>
+                <td>{f.title}{f.due ? <span className="muted" style={{ fontSize: 11 }}> · due {f.due}</span> : null}</td>
+                <td className="muted">{f.status}</td>
+                <td>{f.personnel.name} <span className="muted" style={{ fontSize: 11 }}>· {f.personnel.role}</span></td>
+                <td style={{ display: 'flex', gap: 6 }}>
+                  <a className="pill ok" href={`tel:${f.personnel.phone}`} style={{ textDecoration: 'none' }} title={`Call ${f.personnel.phone}`}>Call</a>
+                  <button className="pill" style={{ cursor: 'pointer', border: '1px solid var(--line)', background: 'transparent', color: 'var(--ink)' }} title="Video conference (UI only)" onClick={() => alert('Video conference — to be wired to your VC provider.')}>Video</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {cmd && cmd.redFlags.length === 0 && <p className="muted">No open red flags. All clear.</p>}
+        {cmd && <p className="muted" style={{ marginTop: 8, marginBottom: 0, fontSize: 12 }}>{cmd.disclaimer}</p>}
+      </div>
+    </>
+  );
+}
+
+// Directory & Hotline: the command-centre phone book with one-touch call and a
+// video-conference launch (UI only for now).
+function DirectoryView({ cmd }: { cmd: CommandView | null }) {
+  return (
+    <>
+      <div className="panel" style={{ marginBottom: 12, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="ccp-h" style={{ margin: 0 }}>Hotline</div>
+        <a className="pill ok" href="tel:1916" style={{ textDecoration: 'none', padding: '6px 14px' }}>Call State Control Room · 1916</a>
+        <button className="pill" style={{ cursor: 'pointer', border: '1px solid var(--line)', background: 'transparent', color: 'var(--ink)', padding: '6px 14px' }} onClick={() => alert('Start video conference — to be wired to your VC provider (Jitsi / Google Meet / Zoom).')}>Start video conference</button>
+        <span className="muted" style={{ fontSize: 12, marginLeft: 'auto' }}>Contacts are demonstration data</span>
+      </div>
+      <div className="panel">
+        <div className="ccp-h">Directory <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>· one-touch call / video</span></div>
+        <table className="tbl">
+          <thead><tr><th>Name</th><th>Role</th><th>Area</th><th>Phone</th><th>Connect</th></tr></thead>
+          <tbody>
+            {(cmd?.directory ?? []).map((c: DirectoryContact, i) => (
+              <tr key={i}>
+                <td>{c.name}</td>
+                <td className="muted">{c.role}</td>
+                <td>{c.area}</td>
+                <td className="tnum">{c.phone}</td>
+                <td style={{ display: 'flex', gap: 6 }}>
+                  <a className="pill ok" href={`tel:${c.phone}`} style={{ textDecoration: 'none' }} title={`Call ${c.phone}`}>Call</a>
+                  <a className="pill" href={`mailto:${c.email}`} style={{ textDecoration: 'none', border: '1px solid var(--line)', background: 'transparent', color: 'var(--ink)' }} title={c.email}>Email</a>
+                  <button className="pill" style={{ cursor: 'pointer', border: '1px solid var(--line)', background: 'transparent', color: 'var(--ink)' }} title="Video conference (UI only)" onClick={() => alert(`Video conference with ${c.name} — to be wired to your VC provider.`)}>Video</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {(!cmd || cmd.directory.length === 0) && <p className="muted">Loading…</p>}
+      </div>
+    </>
+  );
+}
+
 export function CommandCenter() {
   const [d, setD] = useState<CommandCenterData | null>(null);
   const [sites, setSites] = useState<Marker[]>([]);
   const [err, setErr] = useState('');
   const [supplyMode, setSupplyMode] = useState<'Supply' | 'Waste'>('Supply');
+  const [cmd, setCmd] = useState<CommandView | null>(null);
+  // Tab-wise layout so panels don't need scrolling; each tab can pop out to a
+  // separate window to drag onto another monitor (Windows extended display).
+  const initialTab = (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('panel')) as CcTab | null;
+  const [tab, setTab] = useState<CcTab>(initialTab && ['operations', 'command', 'directory'].includes(initialTab) ? initialTab : 'operations');
+  const popout = (t: CcTab) => window.open(`/command-center?panel=${t}`, `cc_${t}`, 'width=1400,height=900');
 
   useEffect(() => {
     const load = () => api.commandCenter().then(setD).catch(() => setErr('Could not load command center metrics.'));
@@ -157,6 +244,10 @@ export function CommandCenter() {
     const t = setInterval(load, 20000);
     return () => clearInterval(t);
   }, []);
+  useEffect(() => {
+    if (tab === 'operations') return;
+    api.commandCenterCommand().then(setCmd).catch(() => setErr('Could not load command data.'));
+  }, [tab]);
   useEffect(() => {
     api.mapPoints().then((m) => setSites(m.sites.map((s) => ({ lat: Number(s.latitude), lng: Number(s.longitude), color: s.fault > 0 ? '#e0533d' : '#22d3ee', label: `${s.name}` })))).catch(() => {});
   }, []);
@@ -192,6 +283,14 @@ export function CommandCenter() {
 
       {err && <div className="err">{err}</div>}
 
+      <div className="cc-tabbar" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+        {([['operations', 'Operations'], ['command', 'Command & Control'], ['directory', 'Directory & Hotline']] as [CcTab, string][]).map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)} className={`cc-seg ${tab === k ? 'on' : ''}`} style={{ cursor: 'pointer' }}>{label}</button>
+        ))}
+        <button onClick={() => popout(tab)} className="pill" style={{ marginLeft: 'auto', cursor: 'pointer', border: '1px solid var(--line)', background: 'transparent', color: 'var(--ink)', padding: '6px 12px' }} title="Open this tab in a new window to drag onto another monitor">⧉ Pop out</button>
+      </div>
+
+      {tab === 'operations' && (<>
       <div className="cc-grid">
         {/* LEFT COLUMN */}
         <div className="cc-col">
@@ -320,6 +419,10 @@ export function CommandCenter() {
           ))}
         </div>
       </div>
+      </>)}
+
+      {tab === 'command' && <CommandControlView cmd={cmd} />}
+      {tab === 'directory' && <DirectoryView cmd={cmd} />}
     </div>
   );
 }

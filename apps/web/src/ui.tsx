@@ -1,4 +1,4 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { NavLink, Navigate, useLocation } from 'react-router-dom';
 import { useAuth, useFeatures } from './contexts';
 import { GROUP_ORDER, NAV } from './registry';
@@ -11,7 +11,15 @@ export function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const { isEnabled, visibility } = useFeatures();
   const [open, setOpen] = useState(false);
+  // Auto-collapse the sidebar to a thin rail after 5s to free screen space;
+  // hovering it expands the full menu (handled in CSS). The Menu button pins it.
+  const [collapsed, setCollapsed] = useState(false);
   const loc = useLocation();
+
+  useEffect(() => {
+    const t = setTimeout(() => setCollapsed(true), 5000);
+    return () => clearTimeout(t);
+  }, []);
 
   // A nav item shows if the feature is enabled AND (public OR the user is logged in).
   const visibleItems = NAV.filter(
@@ -19,7 +27,7 @@ export function Layout({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="shell">
+    <div className={`shell ${collapsed ? 'collapsed' : ''}`}>
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         <div className="brand">SWATI <small>Ops</small></div>
         {GROUP_ORDER.map((group) => {
@@ -55,7 +63,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <div className="main">
         <div className="topbar">
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <button className="btn ghost" onClick={() => setOpen((v) => !v)}>Menu</button>
+            <button className="btn ghost" onClick={() => { setOpen((v) => !v); setCollapsed((c) => !c); }}>Menu</button>
             {loc.pathname !== '/' && (
               <NavLink className="btn ghost" to="/">&larr; Overview</NavLink>
             )}

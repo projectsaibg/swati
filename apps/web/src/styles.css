@@ -25,6 +25,23 @@ button { font: inherit; cursor: pointer; }
 .navlink.active { background: var(--accent); color: #fff; }
 .navlink.locked { color: var(--muted); }
 
+/* Auto-collapsing sidebar (desktop only): after 5s it becomes a thin rail so the
+   content gets full width; hovering the rail expands the full menu as an overlay
+   (no content reflow). Scoped to desktop so the mobile off-canvas rules below win. */
+@media (min-width: 781px) {
+  .shell.collapsed { grid-template-columns: 16px 1fr; position: relative; }
+  .shell.collapsed .sidebar {
+    position: absolute; left: 0; top: 0; height: 100%;
+    width: 16px; overflow: hidden; z-index: 30;
+    border-right: 2px solid var(--accent);
+    transition: width .18s ease, box-shadow .18s ease;
+  }
+  .shell.collapsed .sidebar:hover {
+    width: 248px; overflow-y: auto;
+    box-shadow: 4px 0 18px rgba(0, 0, 0, .45);
+  }
+}
+
 .main { display: flex; flex-direction: column; min-width: 0; }
 .topbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .topbar .right { display: flex; align-items: center; gap: 12px; font-size: 14px; }

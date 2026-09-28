@@ -30,6 +30,9 @@ button { font: inherit; cursor: pointer; }
    (no content reflow). Scoped to desktop so the mobile off-canvas rules below win. */
 @media (min-width: 781px) {
   .shell.collapsed { grid-template-columns: 16px 1fr; position: relative; }
+  /* The sidebar overlays (absolute), so pin the content to the wide 2nd column;
+     otherwise it auto-places into the 16px rail track and the screen collapses. */
+  .shell.collapsed .main { grid-column: 2; }
   .shell.collapsed .sidebar {
     position: absolute; left: 0; top: 0; height: 100%;
     width: 16px; overflow: hidden; z-index: 30;

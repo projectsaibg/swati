@@ -15,7 +15,7 @@
  * matching the rest of the app.
  */
 import {
-  BadRequestException, Body, Controller, ForbiddenException, Get, Injectable, NotFoundException, Param, Post,
+  BadRequestException, Body, Controller, ForbiddenException, Get, Injectable, NotFoundException, Param, Post, Query,
 } from '@nestjs/common';
 import { IsIn, IsOptional } from 'class-validator';
 import { PrismaService } from './prisma.service';
@@ -41,7 +41,7 @@ export interface AuthUser { email?: string; roleName?: string; permissions?: str
 export interface AccessContext {
   roleName: string | null; externalRole: string | null;
   canPush: boolean; canPull: boolean; canResolve: boolean; canImport: boolean;
-  geoScope: string; mapped: boolean;
+  geoScope: string; mission: string; mapped: boolean;
 }
 
 @Injectable()
@@ -56,13 +56,48 @@ export class SyncService {
   async resolveAccess(user?: AuthUser): Promise<AccessContext> {
     const perms = user?.permissions ?? [];
     if (perms.includes('*')) {
-      return { roleName: user?.roleName ?? 'Administrator', externalRole: 'State Administrator', canPush: true, canPull: true, canResolve: true, canImport: true, geoScope: 'ALL', mapped: true };
+      return { roleName: user?.roleName ?? 'Administrator', externalRole: 'State Administrator', canPush: true, canPull: true, canResolve: true, canImport: true, geoScope: 'ALL', mission: 'BOTH', mapped: true };
     }
-    const none: AccessContext = { roleName: user?.roleName ?? null, externalRole: null, canPush: false, canPull: false, canResolve: false, canImport: false, geoScope: 'ALL', mapped: false };
+    const none: AccessContext = { roleName: user?.roleName ?? null, externalRole: null, canPush: false, canPull: false, canResolve: false, canImport: false, geoScope: 'ALL', mission: 'BOTH', mapped: false };
     if (!user?.roleName) return none;
     const rm = await this.prisma.roleMapping.findUnique({ where: { swatiRole: user.roleName } });
     if (!rm) return none;
-    return { roleName: user.roleName, externalRole: rm.externalRole, canPush: rm.canPush, canPull: rm.canPull, canResolve: rm.canResolve, canImport: rm.canImport, geoScope: rm.geoScope, mapped: true };
+    return { roleName: user.roleName, externalRole: rm.externalRole, canPush: rm.canPush, canPull: rm.canPull, canResolve: rm.canResolve, canImport: rm.canImport, geoScope: rm.geoScope, mission: rm.mission, mapped: true };
+  }
+
+  /**
+   * Sujal Gaon village view split by mission — SWSM (out-village components) vs
+   * DWSM (in-village components). Scoped to the caller's geography (district or
+   * village) and defaulted to their mission, so users see only their own area.
+   * Household-level fields are redacted for anonymous viewers (classification).
+   */
+  async sujalGaonView(viewIn: string, user?: AuthUser) {
+    const access = await this.resolveAccess(user);
+    const authed = !!(user && (user.roleName || (user.permissions?.length ?? 0) > 0));
+    const view = viewIn === 'SWSM' || viewIn === 'DWSM'
+      ? viewIn
+      : (access.mission === 'SWSM' || access.mission === 'DWSM' ? access.mission : 'DWSM');
+
+    const villages = await this.prisma.sujalGaon.findMany({ orderBy: { name: 'asc' }, take: 1000 });
+    // Geo-scope: ALL, or restrict to the caller's district / block / village.
+    const scoped = access.geoScope === 'ALL'
+      ? villages
+      : villages.filter((v) => v.district === access.geoScope || v.block === access.geoScope || v.name === access.geoScope);
+
+    const rows = scoped.map((v) => {
+      const households = v.households != null ? Number(v.households) : null;
+      const fhtc = v.fhtc != null ? Number(v.fhtc) : null;
+      const fhtcPct = households && fhtc != null ? Math.round((fhtc / households) * 100) : null;
+      return {
+        id: v.id, name: v.name, district: v.district, block: v.block,
+        mapped: !!v.sujalamBharatId,
+        // DWSM = in-village household components; raw counts redacted for public.
+        dwsm: { households: authed ? households : null, fhtc: authed ? fhtc : null, fhtcPct, supplyStatus: v.supplyStatus },
+        // SWSM = out-village / bulk components (service-area link, bulk supply, GIS).
+        swsm: { serviceLinked: !!v.serviceAreaId, supplyStatus: v.supplyStatus, gisMapped: v.gisBoundary != null },
+      };
+    });
+    return { view, mission: access.mission, geoScope: access.geoScope, authed, total: rows.length, rows, mock: true };
   }
 
   // --- push ---------------------------------------------------------------
@@ -301,6 +336,11 @@ export class SyncController {
   // anonymous), so the UI can gate per-capability actions.
   @Public() @Feature('sujalam_bharat') @Get('my-access')
   myAccess(@CurrentUser() user?: AuthUser) { return this.svc.resolveAccess(user); }
+
+  @Public() @Feature('sujalam_bharat') @Get('sujal-gaon')
+  sujalGaon(@Query('view') view?: string, @CurrentUser() user?: AuthUser) {
+    return this.svc.sujalGaonView(view ?? '', user);
+  }
 
   @Feature('sujalam_bharat') @Perm('data.enter') @Post('sync/push')
   push(@Body() dto: SyncDto, @CurrentUser() user?: AuthUser) {

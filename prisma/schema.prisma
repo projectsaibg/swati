@@ -853,7 +853,8 @@ model RoleMapping {
   canPull        Boolean           @default(false)
   canResolve     Boolean           @default(false)
   canImport      Boolean           @default(false)
-  geoScope       String            @default("ALL") // "ALL" or a district name
+  geoScope       String            @default("ALL") // "ALL", a district, block or village name
+  mission        String            @default("BOTH") // SWSM (out-village), DWSM (in-village) or BOTH
   demo           Boolean           @default(true)
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt

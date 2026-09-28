@@ -727,6 +727,8 @@ async function main() {
     const mapped = seed % 5 !== 0;
     const ph = PUMP_HOUSES.find((p) => p.scheme === schemeNames[si])!;
     const hasGis = i % 5 !== 4; // leave 5 villages without a boundary
+    const vHouseholds = 150 + (seed % 350);
+    const vFhtc = Math.round(vHouseholds * (0.55 + (seed % 40) / 100)); // 55-94% FHTC coverage
     await prisma.sujalGaon.create({
       data: {
         sujalGaonId: mapped ? `SG-WB-${5000 + i}` : null,
@@ -737,8 +739,8 @@ async function main() {
         name: `Village ${i + 1}`,
         district: ph.district,
         population: 800 + (seed % 2200),
-        households: 150 + (seed % 350),
-        fhtc: 100 + (seed % 250),
+        households: vHouseholds,
+        fhtc: vFhtc,
         supplyStatus: 'ACTIVE', supplyDurationHrs: 3 + (seed % 7),
         waterQualityStatus: 'OK',
         mappingStatus: mapped ? 'SYNCED' : 'NOT_MAPPED',
@@ -892,11 +894,12 @@ async function main() {
   // of the base data.enter permission; surfaced in the Access matrix report.
   // externalRole values are the official Sujalam Bharat user types (from the
   // public app's "Select User type" list) so our RBAC maps onto real roles.
+  // mission: SWSM = out-village components, DWSM = in-village components, BOTH = full.
   const rmRows = [
-    { swatiRole: 'Administrator', externalRole: 'NJJM User', canPush: true, canPull: true, canResolve: true, canImport: true, geoScope: 'ALL' },
-    { swatiRole: 'Executive Engineer', externalRole: 'State Level Officer', canPush: true, canPull: true, canResolve: true, canImport: true, geoScope: 'ALL' },
-    { swatiRole: 'Assistant Engineer', externalRole: 'District Level Officer', canPush: false, canPull: true, canResolve: true, canImport: false, geoScope: 'Nadia' },
-    { swatiRole: 'Field Officer', externalRole: 'Designated Implementing Agency Nodal', canPush: false, canPull: false, canResolve: false, canImport: false, geoScope: 'Purba Medinipur' },
+    { swatiRole: 'Administrator', externalRole: 'NJJM User', canPush: true, canPull: true, canResolve: true, canImport: true, geoScope: 'ALL', mission: 'BOTH' },
+    { swatiRole: 'Executive Engineer', externalRole: 'State Level Officer', canPush: true, canPull: true, canResolve: true, canImport: true, geoScope: 'ALL', mission: 'BOTH' },
+    { swatiRole: 'Assistant Engineer', externalRole: 'District Level Officer', canPush: false, canPull: true, canResolve: true, canImport: false, geoScope: 'Nadia', mission: 'DWSM' },
+    { swatiRole: 'Field Officer', externalRole: 'Designated Implementing Agency Nodal', canPush: false, canPull: false, canResolve: false, canImport: false, geoScope: 'Purba Medinipur', mission: 'SWSM' },
   ].map((r) => ({ ...r, externalSystem: 'SUJALAM_BHARAT' as const, demo: true }));
   await prisma.roleMapping.createMany({ data: rmRows as any });
 

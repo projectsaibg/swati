@@ -249,6 +249,7 @@ export const api = {
   sujalamRoleMappings: () => http.get('/sujalam/role-mappings').then((r) => r.data as RoleMappingRow[]),
   sujalamClassification: () => http.get('/sujalam/classification').then((r) => r.data as ClassificationSummary),
   sujalamEntryModules: () => http.get('/sujalam/entry-modules').then((r) => r.data as SujalamEntryModules),
+  sujalamSujalGaon: (view?: string) => http.get('/sujalam/sujal-gaon', { params: { view } }).then((r) => r.data as SujalGaonView),
 
   // Command Center
   commandCenter: () => http.get('/command-center/summary').then((r) => r.data as CommandCenterData),
@@ -454,7 +455,16 @@ export interface ConflictRow {
 }
 export interface MyAccess {
   roleName: string | null; externalRole: string | null;
-  canPush: boolean; canPull: boolean; canResolve: boolean; canImport: boolean; geoScope: string; mapped: boolean;
+  canPush: boolean; canPull: boolean; canResolve: boolean; canImport: boolean;
+  geoScope: string; mission: string; mapped: boolean;
+}
+export interface SujalGaonRow {
+  id: string; name: string; district: string | null; block: string | null; mapped: boolean;
+  dwsm: { households: number | null; fhtc: number | null; fhtcPct: number | null; supplyStatus: string | null };
+  swsm: { serviceLinked: boolean; supplyStatus: string | null; gisMapped: boolean };
+}
+export interface SujalGaonView {
+  view: 'SWSM' | 'DWSM'; mission: string; geoScope: string; authed: boolean; total: number; rows: SujalGaonRow[]; mock: boolean;
 }
 export interface ReportIndex {
   reports: { key: string; label: string; description: string }[];

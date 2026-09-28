@@ -5,7 +5,7 @@ import {
   SujalamOverview, FieldMappingRow, ValidationRuleRow, MapPreview, ValidationReport, SujalamGis,
   SyncJobs, ConflictRow, SyncResult, ImportResult, MyAccess,
   ReadinessReport, SyncActivityReport, JjmMigrationReport, RoleMappingRow, ClassificationSummary,
-  SujalamEntryModules, api,
+  SujalamEntryModules, SujalGaonView, api,
 } from './api';
 import { useAuth } from './contexts';
 
@@ -59,7 +59,7 @@ function fmtVal(v: unknown): string {
   return String(v);
 }
 
-type Tab = 'overview' | 'mapping' | 'validation' | 'gis' | 'sync' | 'reports';
+type Tab = 'overview' | 'mapping' | 'validation' | 'gis' | 'sync' | 'reports' | 'sujalgaon';
 
 export function SujalamBharat() {
   const { user } = useAuth();
@@ -87,6 +87,8 @@ export function SujalamBharat() {
   const [roleMappings, setRoleMappings] = useState<RoleMappingRow[]>([]);
   const [classification, setClassification] = useState<ClassificationSummary | null>(null);
   const [entryModules, setEntryModules] = useState<SujalamEntryModules | null>(null);
+  const [sujalGaon, setSujalGaon] = useState<SujalGaonView | null>(null);
+  const [sgView, setSgView] = useState<'SWSM' | 'DWSM' | ''>('');
 
   useEffect(() => {
     api.sujalamOverview().then(setOv).catch(() => setErr('Could not load Sujalam Bharat integration data.'));
@@ -110,6 +112,12 @@ export function SujalamBharat() {
     if (tab !== 'gis' || gis) return;
     api.sujalamGis().then(setGis).catch(() => setErr('Could not load GIS data.'));
   }, [tab, gis]);
+
+  useEffect(() => {
+    if (tab !== 'sujalgaon') return;
+    setErr('');
+    api.sujalamSujalGaon(sgView || undefined).then(setSujalGaon).catch(() => setErr('Could not load Sujal Gaon data.'));
+  }, [tab, sgView]);
 
   const refreshSync = () => {
     Promise.all([api.sujalamSyncJobs(), api.sujalamConflicts()])
@@ -195,6 +203,7 @@ export function SujalamBharat() {
         {tabBtn('mapping', 'Field Mapping')}
         {tabBtn('validation', 'Validation')}
         {tabBtn('gis', 'GIS Map')}
+        {tabBtn('sujalgaon', 'Sujal Gaon')}
         {tabBtn('sync', 'Sync')}
         {tabBtn('reports', 'Reports')}
         {(tab === 'mapping' || tab === 'validation' || tab === 'sync') && (
@@ -213,6 +222,7 @@ export function SujalamBharat() {
       {tab === 'mapping' && <MappingTab mappings={mappings} preview={preview} classification={classification} authed={!!user} />}
       {tab === 'validation' && <ValidationTab rules={rules} report={report} />}
       {tab === 'gis' && <GisTab gis={gis} />}
+      {tab === 'sujalgaon' && <SujalGaonTab data={sujalGaon} view={sgView} setView={setSgView} />}
       {tab === 'sync' && (
         <SyncTab
           jobs={jobs} conflicts={conflicts} busy={busy} actionMsg={actionMsg} access={access} loggedIn={!!user}
@@ -582,6 +592,73 @@ function GisTab({ gis }: { gis: SujalamGis | null }) {
             )}
           </div>
         </div>
+      </div>
+    </>
+  );
+}
+
+function SujalGaonTab({ data, view, setView }: { data: SujalGaonView | null; view: 'SWSM' | 'DWSM' | ''; setView: (v: 'SWSM' | 'DWSM' | '') => void }) {
+  const active = data?.view ?? (view || 'DWSM');
+  const viewBtn = (v: 'SWSM' | 'DWSM', label: string) => (
+    <button
+      onClick={() => setView(v)}
+      className={`pill ${active === v ? 'ok' : ''}`}
+      style={{ cursor: 'pointer', border: '1px solid var(--line)', background: active === v ? undefined : 'transparent', color: active === v ? undefined : 'var(--muted)', padding: '6px 14px' }}
+    >{label}</button>
+  );
+  return (
+    <>
+      <div className="panel" style={{ marginBottom: 12, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        {viewBtn('DWSM', 'DWSM · in-village')}
+        {viewBtn('SWSM', 'SWSM · out-village')}
+        <span className="muted" style={{ fontSize: 12, marginLeft: 'auto' }}>
+          {data ? <>Scope <strong>{data.geoScope}</strong> · your mission <strong>{data.mission}</strong> · {data.total} village{data.total === 1 ? '' : 's'}</> : 'Loading…'}
+        </span>
+      </div>
+
+      <div className="panel">
+        <h3 style={{ marginTop: 0 }}>
+          {active === 'DWSM' ? 'In-village components (DWSM)' : 'Out-village components (SWSM)'}
+          <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}> · Sujal Gaon villages in your scope</span>
+        </h3>
+        {active === 'DWSM' ? (
+          <table className="tbl">
+            <thead><tr><th>Village</th><th>District</th><th>Block</th><th>Households</th><th>FHTC</th><th>FHTC %</th><th>Supply</th><th>Mapped</th></tr></thead>
+            <tbody>
+              {(data?.rows ?? []).map((r) => (
+                <tr key={r.id}>
+                  <td>{r.name}</td>
+                  <td className="muted">{r.district ?? '—'}</td>
+                  <td className="muted">{r.block ?? '—'}</td>
+                  <td className="tnum">{r.dwsm.households ?? <span className="muted" title="Sign in to view household data">•••</span>}</td>
+                  <td className="tnum">{r.dwsm.fhtc ?? <span className="muted">•••</span>}</td>
+                  <td className="tnum" style={{ color: r.dwsm.fhtcPct != null ? pctColor(r.dwsm.fhtcPct) : undefined }}>{r.dwsm.fhtcPct != null ? `${r.dwsm.fhtcPct}%` : '—'}</td>
+                  <td className="muted">{r.dwsm.supplyStatus ?? '—'}</td>
+                  <td>{r.mapped ? <span className="pill ok">✓</span> : <span className="muted">—</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <table className="tbl">
+            <thead><tr><th>Village</th><th>District</th><th>Block</th><th>Service-area linked</th><th>Bulk supply</th><th>GIS boundary</th><th>Mapped</th></tr></thead>
+            <tbody>
+              {(data?.rows ?? []).map((r) => (
+                <tr key={r.id}>
+                  <td>{r.name}</td>
+                  <td className="muted">{r.district ?? '—'}</td>
+                  <td className="muted">{r.block ?? '—'}</td>
+                  <td>{r.swsm.serviceLinked ? <span className="pill ok">linked</span> : <span className="pill watch">unlinked</span>}</td>
+                  <td className="muted">{r.swsm.supplyStatus ?? '—'}</td>
+                  <td>{r.swsm.gisMapped ? <span style={{ color: 'var(--ok)' }}>✓</span> : <span className="muted">—</span>}</td>
+                  <td>{r.mapped ? <span className="pill ok">✓</span> : <span className="muted">—</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {data && data.rows.length === 0 && <p className="muted">No villages in your scope.</p>}
+        {data && !data.authed && active === 'DWSM' && <p className="muted" style={{ marginTop: 8, marginBottom: 0, fontSize: 12 }}>Household counts (•••) are redacted for public view. Sign in to reveal.</p>}
       </div>
     </>
   );

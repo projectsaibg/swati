@@ -248,6 +248,7 @@ export const api = {
   sujalamJjmMigration: () => http.get('/sujalam/reports/jjm-migration').then((r) => r.data as JjmMigrationReport),
   sujalamRoleMappings: () => http.get('/sujalam/role-mappings').then((r) => r.data as RoleMappingRow[]),
   sujalamClassification: () => http.get('/sujalam/classification').then((r) => r.data as ClassificationSummary),
+  sujalamEntryModules: () => http.get('/sujalam/entry-modules').then((r) => r.data as SujalamEntryModules),
 
   // Command Center
   commandCenter: () => http.get('/command-center/summary').then((r) => r.data as CommandCenterData),
@@ -403,6 +404,13 @@ export interface MapPreview {
   missingRequired: string[]; redactedFields: string[]; mock: boolean; disclaimer: string;
 }
 export interface ClassificationSummary { sensitive: string[]; internal: string[]; note: string }
+export interface EntryModule {
+  key: string; label: string; swatiBridge: string;
+  total: number; mapped: number; assets: number | null; assetsMapped: number | null;
+}
+export interface SujalamEntryModules {
+  modules: EntryModule[]; assetChain: string[]; mock: boolean; disclaimer: string;
+}
 export interface ValidationIssueRow {
   id: string; label: string; valid: boolean; errors: number; warnings: number;
   details: { field: string; ruleType: string; severity: string; message: string }[];

@@ -90,8 +90,10 @@ export function Dashboard() {
   const alertAccent = !s ? 'amber' : s.alerts.critical + s.alerts.alarm > 0 ? 'red' : s.alerts.watch > 0 ? 'amber' : 'teal';
 
   // Field Instruments is a detailed asset inventory, not an overview module —
-  // keep it in the Assets nav but off the Executive Overview.
-  const EXEC_HIDDEN = new Set(['executive_overview', 'instrumentation']);
+  // keep it in the Assets nav but off the Executive Overview. Field Verification
+  // is likewise kept in the menu (and the app) but off the Executive Overview so
+  // the Basic band stays a uniform 8 cards.
+  const EXEC_HIDDEN = new Set(['executive_overview', 'instrumentation', 'field_verification']);
   const featured = NAV.filter((i) => !EXEC_HIDDEN.has(i.key) && isEnabled(i.key));
   const TIER_BANDS: { name: string; match: string[]; accent: string; tagline: string }[] = [
     { name: 'Basic', match: ['BASE'], accent: 'slate', tagline: 'Core operations' },

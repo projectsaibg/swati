@@ -210,6 +210,52 @@ export class SujalamService {
   }
 
   /**
+   * The Sujalam Bharat app's dashboard entry modules, each bridged to the SWATI
+   * data that feeds it, with live counts. This makes SWATI's role as a bridge to
+   * the Sujalam Bharat app explicit: what we hold vs. what each module needs.
+   */
+  async entryModules() {
+    const [schemes, schemesMapped, areas, areasMapped, villages, villagesMapped, infra, infraMapped] = await Promise.all([
+      this.prisma.schemeProfile.count(),
+      this.prisma.schemeProfile.count({ where: { sujalamBharatId: { not: null } } }),
+      this.prisma.serviceArea.count(),
+      this.prisma.serviceArea.count({ where: { sujalamBharatId: { not: null } } }),
+      this.prisma.sujalGaon.count(),
+      this.prisma.sujalGaon.count({ where: { sujalamBharatId: { not: null } } }),
+      this.prisma.infrastructureMapping.count(),
+      this.prisma.infrastructureMapping.count({ where: { sujalamBharatId: { not: null } } }),
+    ]);
+    return {
+      modules: [
+        {
+          key: 'bulk_water_supply', label: 'Bulk water supply Scheme registry',
+          swatiBridge: 'Scheme profiles + infrastructure assets (BWT asset chain)',
+          total: schemes, mapped: schemesMapped, assets: infra, assetsMapped: infraMapped,
+        },
+        {
+          key: 'out_village_swsm', label: 'Mapping of out village components by SWSM',
+          swatiBridge: 'Service areas (out-village / bulk components)',
+          total: areas, mapped: areasMapped, assets: null, assetsMapped: null,
+        },
+        {
+          key: 'in_village_dwsm', label: 'Mapping of in village components by DWSM',
+          swatiBridge: 'Sujal Gaon villages (in-village components)',
+          total: villages, mapped: villagesMapped, assets: null, assetsMapped: null,
+        },
+      ],
+      // The Bulk Water Supply Scheme asset chain (BWT ID stepper in the app).
+      assetChain: [
+        'Water Treatment Plant / Source (BOD, TSS, pumped/gravity, water flow)',
+        'Raw Water / Escape Reservoir',
+        'Pump House',
+        'Raw Water Transmission Mains Valves',
+        'SCADA',
+      ],
+      mock: true, disclaimer: DISCLAIMER,
+    };
+  }
+
+  /**
    * GIS layer for the map: geolocated infrastructure assets (points) plus the
    * service-area and village boundaries (GeoJSON polygons) that carry one.
    */
@@ -271,6 +317,9 @@ export class SujalamController {
 
   @Public() @Feature('sujalam_bharat') @Get('classification')
   classification() { return this.svc.classification(); }
+
+  @Public() @Feature('sujalam_bharat') @Get('entry-modules')
+  entryModules() { return this.svc.entryModules(); }
 
   @Public() @Feature('sujalam_bharat') @Get('validation-report')
   validationReport(@Query('system') system?: string, @Query('entityType') entityType?: string) {

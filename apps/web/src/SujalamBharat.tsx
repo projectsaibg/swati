@@ -4,7 +4,8 @@ import 'leaflet/dist/leaflet.css';
 import {
   SujalamOverview, FieldMappingRow, ValidationRuleRow, MapPreview, ValidationReport, SujalamGis,
   SyncJobs, ConflictRow, SyncResult, ImportResult, MyAccess,
-  ReadinessReport, SyncActivityReport, JjmMigrationReport, RoleMappingRow, ClassificationSummary, api,
+  ReadinessReport, SyncActivityReport, JjmMigrationReport, RoleMappingRow, ClassificationSummary,
+  SujalamEntryModules, api,
 } from './api';
 import { useAuth } from './contexts';
 
@@ -85,10 +86,12 @@ export function SujalamBharat() {
   const [jjmReport, setJjmReport] = useState<JjmMigrationReport | null>(null);
   const [roleMappings, setRoleMappings] = useState<RoleMappingRow[]>([]);
   const [classification, setClassification] = useState<ClassificationSummary | null>(null);
+  const [entryModules, setEntryModules] = useState<SujalamEntryModules | null>(null);
 
   useEffect(() => {
     api.sujalamOverview().then(setOv).catch(() => setErr('Could not load Sujalam Bharat integration data.'));
     api.sujalamClassification().then(setClassification).catch(() => {});
+    api.sujalamEntryModules().then(setEntryModules).catch(() => {});
   }, []);
 
   // RBAC: resolve the current user's integration capabilities (re-runs on login).
@@ -206,7 +209,7 @@ export function SujalamBharat() {
         )}
       </div>
 
-      {tab === 'overview' && <OverviewTab ov={ov} />}
+      {tab === 'overview' && <OverviewTab ov={ov} entryModules={entryModules} />}
       {tab === 'mapping' && <MappingTab mappings={mappings} preview={preview} classification={classification} authed={!!user} />}
       {tab === 'validation' && <ValidationTab rules={rules} report={report} />}
       {tab === 'gis' && <GisTab gis={gis} />}
@@ -584,7 +587,7 @@ function GisTab({ gis }: { gis: SujalamGis | null }) {
   );
 }
 
-function OverviewTab({ ov }: { ov: SujalamOverview | null }) {
+function OverviewTab({ ov, entryModules }: { ov: SujalamOverview | null; entryModules: SujalamEntryModules | null }) {
   return (
     <>
       <section className="kpi-grid" style={{ marginBottom: 14 }}>
@@ -597,6 +600,31 @@ function OverviewTab({ ov }: { ov: SujalamOverview | null }) {
         <div className="kpi"><div className="val tnum">{ov ? ov.sujalGaon.total : '—'}</div><div className="lbl">Sujal Gaon villages ({ov ? ov.sujalGaon.mapped : 0} mapped)</div></div>
         <div className="kpi"><div className="val tnum">{ov ? ov.infrastructure.total : '—'}</div><div className="lbl">Infrastructure assets ({ov ? ov.infrastructure.mapped : 0} mapped)</div></div>
       </section>
+
+      {/* Bridge to the Sujalam Bharat app's dashboard entry modules. */}
+      <div className="panel" style={{ marginBottom: 12 }}>
+        <h3 style={{ marginTop: 0 }}>Sujalam Bharat entry modules <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>· SWATI data bridged to each app module</span></h3>
+        <table className="tbl">
+          <thead><tr><th>Sujalam Bharat module</th><th>SWATI bridge</th><th>Records</th><th>Mapped</th><th>Assets</th></tr></thead>
+          <tbody>
+            {(entryModules?.modules ?? []).map((m) => (
+              <tr key={m.key}>
+                <td>{m.label}</td>
+                <td className="muted">{m.swatiBridge}</td>
+                <td className="tnum">{m.total}</td>
+                <td className="tnum" style={{ color: 'var(--ok)' }}>{m.mapped}</td>
+                <td className="tnum muted">{m.assets != null ? `${m.assetsMapped}/${m.assets}` : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!entryModules && <p className="muted">Loading…</p>}
+        {entryModules && (
+          <p className="muted" style={{ marginTop: 8, marginBottom: 0, fontSize: 12 }}>
+            Bulk Water Supply asset chain: {entryModules.assetChain.join(' → ')}
+          </p>
+        )}
+      </div>
 
       <div className="panel" style={{ marginBottom: 12 }}>
         <h3 style={{ marginTop: 0 }}>Integration providers</h3>

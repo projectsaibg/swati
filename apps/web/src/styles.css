@@ -46,8 +46,11 @@ button { font: inherit; cursor: pointer; }
 }
 
 .main { display: flex; flex-direction: column; min-width: 0; }
-.topbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.topbar { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .topbar .right { display: flex; align-items: center; gap: 12px; font-size: 14px; }
+/* SWATI logo centred in the header, independent of the left/right group widths. */
+.topbar-logo { position: absolute; left: 50%; transform: translateX(-50%); height: 34px; width: auto; pointer-events: none; }
+@media (max-width: 780px) { .topbar-logo { height: 26px; } }
 .btn { background: var(--accent); color: #fff; border: 0; padding: 8px 14px; border-radius: 8px; font-weight: 600; }
 .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
 .content { padding: 22px; overflow: auto; }

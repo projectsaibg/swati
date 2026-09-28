@@ -68,6 +68,7 @@ export function Layout({ children }: { children: ReactNode }) {
               <NavLink className="btn ghost" to="/">&larr; Overview</NavLink>
             )}
           </div>
+          <img className="topbar-logo" src="/swati-logo.png" alt="SWATI" />
           <div className="right">
             {user ? (
               <>
